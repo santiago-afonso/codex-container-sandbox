@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+# codex-container-sandbox: run Codex CLI inside a Podman container with yolo.
+
+set -euo pipefail
+
+# ----------------------------
+# Defaults (override via env or config)
+# ----------------------------
+: "${CODEX_CONTAINER_SANDBOX_IMAGE:=localhost/codex-container-sandbox:latest}"
+: "${CODEX_CONTAINER_SANDBOX_CONTAINER_HOME:=/home/codex}"
+: "${CODEX_CONTAINER_SANDBOX_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/codex-container-sandbox}"
+: "${CODEX_CONTAINER_SANDBOX_CONFIG_FILE:=${XDG_CONFIG_HOME:-$HOME/.config}/codex-container-sandbox/config.sh}"
+: "${CODEX_CONTAINER_SANDBOX_PODMAN:=podman}"
+
+# If set to 1, prints the computed podman command.
+: "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
+
+# If set to 1, keeps the container after exit (useful for debugging).
+: "${CODEX_CONTAINER_SANDBOX_PERSIST:=0}"
+
+# Extra mounts (arrays).
+SANDBOX_RO_MOUNTS=()
+SANDBOX_RW_MOUNTS=()
+
+# Pass-through env vars into container (only if present in host env).
+SANDBOX_ENV_PASSTHROUGH=()
+
+# ----------------------------
+# Load config (bash, optional)
+# ----------------------------
+if [[ -f "$CODEX_CONTAINER_SANDBOX_CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CODEX_CONTAINER_SANDBOX_CONFIG_FILE"
+fi
+
+# Allow config to set these arrays using either bash arrays or whitespace-separated strings.
+if declare -p CODEX_CONTAINER_SANDBOX_RO_MOUNTS >/dev/null 2>&1; then
+  # shellcheck disable=SC2154
+  SANDBOX_RO_MOUNTS+=("${CODEX_CONTAINER_SANDBOX_RO_MOUNTS[@]}")
+elif [[ -n "${CODEX_CONTAINER_SANDBOX_RO_MOUNTS-}" ]]; then
+  # shellcheck disable=SC2206
+  SANDBOX_RO_MOUNTS+=(${CODEX_CONTAINER_SANDBOX_RO_MOUNTS})
+fi
+
+if declare -p CODEX_CONTAINER_SANDBOX_RW_MOUNTS >/dev/null 2>&1; then
+  # shellcheck disable=SC2154
+  SANDBOX_RW_MOUNTS+=("${CODEX_CONTAINER_SANDBOX_RW_MOUNTS[@]}")
+elif [[ -n "${CODEX_CONTAINER_SANDBOX_RW_MOUNTS-}" ]]; then
+  # shellcheck disable=SC2206
+  SANDBOX_RW_MOUNTS+=(${CODEX_CONTAINER_SANDBOX_RW_MOUNTS})
+fi
+
+if declare -p CODEX_CONTAINER_SANDBOX_ENV_PASSTHROUGH >/dev/null 2>&1; then
+  # shellcheck disable=SC2154
+  SANDBOX_ENV_PASSTHROUGH+=("${CODEX_CONTAINER_SANDBOX_ENV_PASSTHROUGH[@]}")
+elif [[ -n "${CODEX_CONTAINER_SANDBOX_ENV_PASSTHROUGH-}" ]]; then
+  # shellcheck disable=SC2206
+  SANDBOX_ENV_PASSTHROUGH+=(${CODEX_CONTAINER_SANDBOX_ENV_PASSTHROUGH})
+fi
+
+# ----------------------------
+# Helper: usage
+# ----------------------------
+usage() {
+  cat <<'EOF'
+codex-container-sandbox - run Codex CLI in a Podman container with yolo
+
+USAGE
+  codex-container-sandbox [OPTIONS...] -- [CODEX_ARGS...]
+  codex-container-sandbox [OPTIONS...] [CODEX_ARGS...]    # (also works; -- is optional)
+
+OPTIONS
+  --image IMAGE    Podman image to run (default: $CODEX_CONTAINER_SANDBOX_IMAGE)
+  --ro PATH        Bind-mount PATH read-only (repeatable)
+  --rw PATH        Bind-mount PATH read-write (repeatable)
+  --state DIR      Host state dir for Codex HOME inside container
+  --debug          Print the computed podman command
+  --persist        Do not --rm the container (keeps it for inspection)
+  --shell          Start an interactive shell in the container instead of running codex
+  -h, --help       Show this help
+
+NOTES
+  - Always runs codex with --dangerously-bypass-approvals-and-sandbox and --sandbox danger-full-access.
+  - Networking is enabled (no egress restrictions).
+  - Web search tool is enabled (features.web_search_request=true).
+EOF
+}
+
+# ----------------------------
+# Parse args
+# ----------------------------
+RUN_SHELL=0
+CODEX_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --image) CODEX_CONTAINER_SANDBOX_IMAGE="${2:?missing IMAGE}"; shift 2 ;;
+    --ro) SANDBOX_RO_MOUNTS+=("${2:?missing PATH}"); shift 2 ;;
+    --rw) SANDBOX_RW_MOUNTS+=("${2:?missing PATH}"); shift 2 ;;
+    --state) CODEX_CONTAINER_SANDBOX_STATE_DIR="${2:?missing DIR}"; shift 2 ;;
+    --debug) CODEX_CONTAINER_SANDBOX_DEBUG=1; shift ;;
+    --persist) CODEX_CONTAINER_SANDBOX_PERSIST=1; shift ;;
+    --shell) RUN_SHELL=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; CODEX_ARGS+=("$@"); break ;;
+    *) CODEX_ARGS+=("$1"); shift ;;
+  esac
+done
+
+# ----------------------------
+# Compute workspace mount
+# ----------------------------
+WORKSPACE_HOST="$(pwd -P)"
+WORKSPACE_ROOT_HOST="$WORKSPACE_HOST"
+if git -C "$WORKSPACE_HOST" rev-parse --show-toplevel >/dev/null 2>&1; then
+  WORKSPACE_ROOT_HOST="$(git -C "$WORKSPACE_HOST" rev-parse --show-toplevel)"
+fi
+WORKSPACE_HOST="$(readlink -f "$WORKSPACE_HOST")"
+WORKSPACE_ROOT_HOST="$(readlink -f "$WORKSPACE_ROOT_HOST")"
+WORKSPACE_BASE="$(basename "$WORKSPACE_ROOT_HOST")"
+CONTAINER_HOME="$CODEX_CONTAINER_SANDBOX_CONTAINER_HOME"
+WORKSPACE_ROOT_CONT="$CONTAINER_HOME/$WORKSPACE_BASE"
+
+if [[ "$WORKSPACE_HOST" == "$WORKSPACE_ROOT_HOST" ]]; then
+  WORKSPACE_CONT="$WORKSPACE_ROOT_CONT"
+elif [[ "$WORKSPACE_HOST" == "$WORKSPACE_ROOT_HOST/"* ]]; then
+  rel="${WORKSPACE_HOST#$WORKSPACE_ROOT_HOST/}"
+  WORKSPACE_CONT="$WORKSPACE_ROOT_CONT/$rel"
+else
+  WORKSPACE_CONT="$WORKSPACE_ROOT_CONT"
+fi
+
+# ----------------------------
+# Prepare host state dir (0700)
+# ----------------------------
+install -d -m 0700 "$CODEX_CONTAINER_SANDBOX_STATE_DIR"
+STATE_CONT="$CONTAINER_HOME/.codex"
+
+# ----------------------------
+# Helper: map a host path -> container path
+#  - if under $HOME, preserve relative path under container home
+#  - else, mount to the same absolute path
+# ----------------------------
+map_path() {
+  local host_path="$1"
+  host_path="$(readlink -f "$host_path")"
+  if [[ "$host_path" == "$HOME/"* ]]; then
+    local rel="${host_path#$HOME/}"
+    echo "$CONTAINER_HOME/$rel"
+  else
+    echo "$host_path"
+  fi
+}
+
+# ----------------------------
+# Build podman args
+# ----------------------------
+PODMAN_ARGS=()
+
+# tty / interactive only if stdout is a tty
+if [[ -t 0 && -t 1 ]]; then
+  PODMAN_ARGS+=( -it )
+else
+  PODMAN_ARGS+=( -i )
+fi
+
+if [[ "$CODEX_CONTAINER_SANDBOX_PERSIST" -eq 0 ]]; then
+  PODMAN_ARGS+=( --rm )
+fi
+
+# Rootless Podman default user mapping makes host-owned bind mounts appear as
+# owned by container uid 0. Use keep-id so the invoking host UID/GID map to the
+# same IDs in-container, then run as that user so the mounted workspace remains
+# writable without creating root-owned files on the host.
+PODMAN_ARGS+=( --userns=keep-id )
+PODMAN_ARGS+=( --user "$(id -u):$(id -g)" )
+
+# Keep it predictable
+PODMAN_ARGS+=( --env "HOME=$CONTAINER_HOME" --env "USER=${USER:-codex}" )
+PODMAN_ARGS+=( --env "CODEX_HOME=$STATE_CONT" )
+PODMAN_ARGS+=( --workdir "$WORKSPACE_CONT" )
+
+# Minimal PATH with typical user bins first
+PODMAN_ARGS+=( --env "PATH=$CONTAINER_HOME/.local/bin:$CONTAINER_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" )
+
+# Put common tool caches inside the mounted state dir by default.
+PODMAN_ARGS+=( --env "XDG_CACHE_HOME=$STATE_CONT/cache" )
+
+# Workspace RW (root or current dir)
+PODMAN_ARGS+=( -v "$WORKSPACE_ROOT_HOST:$WORKSPACE_ROOT_CONT:rw" )
+
+# Codex state dir RW
+PODMAN_ARGS+=( -v "$CODEX_CONTAINER_SANDBOX_STATE_DIR:$STATE_CONT:rw" )
+
+# Extra mounts from config/flags
+for p in "${SANDBOX_RO_MOUNTS[@]}"; do
+  [[ -e "$p" ]] || { echo "[codex-container-sandbox] RO mount missing: $p" >&2; exit 2; }
+  PODMAN_ARGS+=( -v "$(readlink -f "$p"):$(map_path "$p"):ro" )
+done
+
+for p in "${SANDBOX_RW_MOUNTS[@]}"; do
+  [[ -e "$p" ]] || { echo "[codex-container-sandbox] RW mount missing: $p" >&2; exit 2; }
+  PODMAN_ARGS+=( -v "$(readlink -f "$p"):$(map_path "$p"):rw" )
+done
+
+# Env passthrough
+for var in "${SANDBOX_ENV_PASSTHROUGH[@]}"; do
+  if [[ -n "${!var-}" ]]; then
+    PODMAN_ARGS+=( --env "$var" )
+  fi
+done
+
+# ----------------------------
+# Assemble codex command
+# ----------------------------
+if [[ "$RUN_SHELL" -eq 1 ]]; then
+  CONTAINER_CMD=( bash -l )
+else
+  CONTAINER_CMD=( codex )
+  # Always enable web search tool availability for the agent. `--search` is
+  # not reliably honored by `codex exec`, but feature-enabling is.
+  CONTAINER_CMD+=( --enable web_search_request )
+  exec_idx=-1
+  for i in "${!CODEX_ARGS[@]}"; do
+    if [[ "${CODEX_ARGS[$i]}" == "exec" || "${CODEX_ARGS[$i]}" == "e" ]]; then
+      exec_idx="$i"
+      break
+    fi
+  done
+
+  if [[ "$exec_idx" -ge 0 ]]; then
+    before_exec=( "${CODEX_ARGS[@]:0:$((exec_idx+1))}" )
+    after_exec=( "${CODEX_ARGS[@]:$((exec_idx+1))}" )
+
+    # Remove any global-yolo flags from before_exec, since `codex exec` has its
+    # own copies of these options and the top-level ones don't affect exec.
+    before_exec_clean=()
+    i=0
+    while [[ "$i" -lt "${#before_exec[@]}" ]]; do
+      case "${before_exec[$i]}" in
+        --sandbox|-s|--ask-for-approval|-a)
+          i=$((i+2))
+          ;;
+        --yolo|--dangerously-bypass-approvals-and-sandbox|--full-auto)
+          i=$((i+1))
+          ;;
+        *)
+          before_exec_clean+=( "${before_exec[$i]}" )
+          i=$((i+1))
+          ;;
+      esac
+    done
+
+    has_bypass=0
+    has_sandbox=0
+    for arg in "${after_exec[@]}"; do
+      if [[ "$arg" == "--dangerously-bypass-approvals-and-sandbox" || "$arg" == "--yolo" ]]; then
+        has_bypass=1
+      elif [[ "$arg" == "--sandbox" || "$arg" == "-s" ]]; then
+        has_sandbox=1
+      fi
+    done
+
+    injected=()
+    if [[ "$has_bypass" -eq 0 ]]; then
+      injected+=( --dangerously-bypass-approvals-and-sandbox )
+    fi
+    if [[ "$has_sandbox" -eq 0 ]]; then
+      injected+=( --sandbox danger-full-access )
+    fi
+
+    CONTAINER_CMD+=( "${before_exec_clean[@]}" "${injected[@]}" "${after_exec[@]}" )
+  else
+    # No exec subcommand found; inject at the top level.
+    has_bypass=0
+    has_sandbox=0
+    for arg in "${CODEX_ARGS[@]}"; do
+      if [[ "$arg" == "--dangerously-bypass-approvals-and-sandbox" || "$arg" == "--yolo" ]]; then
+        has_bypass=1
+      elif [[ "$arg" == "--sandbox" || "$arg" == "-s" ]]; then
+        has_sandbox=1
+      fi
+    done
+
+    if [[ "$has_bypass" -eq 0 ]]; then
+      CONTAINER_CMD+=( --dangerously-bypass-approvals-and-sandbox )
+    fi
+    if [[ "$has_sandbox" -eq 0 ]]; then
+      CONTAINER_CMD+=( --sandbox danger-full-access )
+    fi
+    CONTAINER_CMD+=( "${CODEX_ARGS[@]}" )
+  fi
+fi
+
+# ----------------------------
+# Run
+# ----------------------------
+FULL_CMD=( "$CODEX_CONTAINER_SANDBOX_PODMAN" run "${PODMAN_ARGS[@]}" "$CODEX_CONTAINER_SANDBOX_IMAGE" "${CONTAINER_CMD[@]}" )
+
+if [[ "$CODEX_CONTAINER_SANDBOX_DEBUG" -eq 1 ]]; then
+  echo "[codex-container-sandbox] podman cmd:" >&2
+  printf '  %q' "${FULL_CMD[@]}" >&2
+  echo >&2
+fi
+
+exec "${FULL_CMD[@]}"
