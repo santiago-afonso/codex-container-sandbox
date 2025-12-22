@@ -4,7 +4,6 @@ A Podman wrapper that runs `codex` inside a container and always uses:
 
 - `--dangerously-bypass-approvals-and-sandbox` (the actual “yolo” behavior)
 - `--sandbox danger-full-access`
-- `--enable web_search_request` (web search tool available to the agent)
 
 Networking is enabled (full egress).
 

@@ -82,7 +82,6 @@ OPTIONS
 NOTES
   - Always runs codex with --dangerously-bypass-approvals-and-sandbox and --sandbox danger-full-access.
   - Networking is enabled (no egress restrictions).
-  - Web search tool is enabled (features.web_search_request=true).
 EOF
 }
 
@@ -217,9 +216,6 @@ if [[ "$RUN_SHELL" -eq 1 ]]; then
   CONTAINER_CMD=( bash -l )
 else
   CONTAINER_CMD=( codex )
-  # Always enable web search tool availability for the agent. `--search` is
-  # not reliably honored by `codex exec`, but feature-enabling is.
-  CONTAINER_CMD+=( --enable web_search_request )
   exec_idx=-1
   for i in "${!CODEX_ARGS[@]}"; do
     if [[ "${CODEX_ARGS[$i]}" == "exec" || "${CODEX_ARGS[$i]}" == "e" ]]; then
