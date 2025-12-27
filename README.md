@@ -53,6 +53,18 @@ CODEX_CONTAINER_SANDBOX_RW_MOUNTS=(
 codex-container-sandbox exec "Summarize the repo"
 ```
 
+### Self-test (network + mount isolation)
+
+Runs three checks:
+
+1. Container has internet connectivity.
+2. Host files outside the workspace are not visible by default.
+3. An explicitly mounted host directory is readable and writable (RW mount).
+
+```bash
+./selftest.sh
+```
+
 ### Shell inside container
 
 ```bash
