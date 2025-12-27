@@ -13,16 +13,16 @@ Networking is enabled (full egress).
 ### 1) Build an image
 
 You need an image that includes `codex`, `git`, `bash`, `python3`, and `uv`.
-Use `codex-container-sandbox/Containerfile`:
+Use `Containerfile`:
 
 ```bash
-podman build -t localhost/codex-container-sandbox:latest -f codex-container-sandbox/Containerfile codex-container-sandbox
+podman build -t localhost/codex-container-sandbox:latest -f Containerfile .
 ```
 
 ### 2) Install the wrapper
 
 ```bash
-install -m 0755 codex-container-sandbox/codex-container-sandbox ~/.local/bin/codex-container-sandbox
+install -m 0755 ./codex-container-sandbox ~/.local/bin/codex-container-sandbox
 ```
 
 ### 3) (Optional) Configure mounts

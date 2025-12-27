@@ -15,7 +15,7 @@ This repo contains a wrapper script intended to be installed as `codex-container
 
 1. **Build the image**
 
-   From the repo root:
+   From the repo root (this repository):
 
    ```bash
    podman build -t localhost/codex-container-sandbox:latest -f Containerfile .
@@ -59,6 +59,10 @@ This repo contains a wrapper script intended to be installed as `codex-container
    ./selftest.sh
    ```
 
+   If this repo is vendored as a git submodule at `./codex-container-sandbox/` (for example in a dotfiles repo), either:
+   - `cd codex-container-sandbox && ./selftest.sh`, or
+   - run `./codex-container-sandbox/selftest.sh` from the parent repo root.
+
 6. **Run Codex**
 
    ```bash
@@ -69,4 +73,3 @@ This repo contains a wrapper script intended to be installed as `codex-container
 
 - This wrapper runs Codex in full-yolo mode (`--dangerously-bypass-approvals-and-sandbox`) with full networking. Anything mounted into the container can be exfiltrated.
 - Keep mounts minimal; do not mount secrets, password stores, SSH keys, or large chunks of `$HOME` unless you intend to expose them.
-
