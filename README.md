@@ -53,6 +53,17 @@ CODEX_CONTAINER_SANDBOX_RW_MOUNTS=(
 codex-container-sandbox exec "Summarize the repo"
 ```
 
+### Makefile helpers
+
+From the repo root:
+
+```bash
+make image
+make selftest
+make pii-scan
+make validate-docs
+```
+
 ### Self-test (network + mount isolation)
 
 Runs three checks:
