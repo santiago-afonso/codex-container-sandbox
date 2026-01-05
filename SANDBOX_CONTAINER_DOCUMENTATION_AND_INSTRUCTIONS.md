@@ -21,6 +21,19 @@ Concretely:
 - Use `./tmp/...` relative to the repo root whenever possible.
 - Do **not** write to OS temp directories like `/tmp` unless explicitly required; container `/tmp` is ephemeral and harder to discover from the repo.
 
+### Default `tmp/` structure (use these folders)
+
+Create these subfolders as needed and place files in the most specific bucket:
+
+- `{workspace}/tmp/fetched/web/` — raw fetched webpages and derived markdown/HTML snapshots
+- `{workspace}/tmp/fetched/pdf/` — downloaded PDFs (source-of-truth inputs)
+- `{workspace}/tmp/fetched/images/` — downloaded images (PNG/JPG/SVG, etc.)
+- `{workspace}/tmp/fetched/other/` — any other fetched/binary inputs (ZIPs, data dumps, etc.)
+
+Notes:
+- Prefer deterministic, descriptive filenames (include domain/date/slug when practical).
+- Keep any “processed” artifacts next to the input folder when it’s clearly tied to a specific fetch (e.g. rendered PDF pages under `tmp/fetched/pdf/<doc-stem>/pages/`).
+
 This includes:
 - rendered PDF page images
 - extracted markdown
