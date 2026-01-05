@@ -7,6 +7,10 @@ WRAPPER="$ROOT/codex-container-sandbox"
 IMAGE_DEFAULT="localhost/codex-container-sandbox:latest"
 IMAGE="${CODEX_CONTAINER_SANDBOX_IMAGE:-$IMAGE_DEFAULT}"
 
+# Selftests should not mutate the repo by auto-initializing Beads or creating
+# sync branches/worktrees.
+export CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT=1
+
 die() {
   echo "[selftest] ERROR: $*" >&2
   exit 1
@@ -92,4 +96,3 @@ echo "[selftest] OK: RW mount works as expected"
 popd >/dev/null
 
 echo "[selftest] PASS"
-

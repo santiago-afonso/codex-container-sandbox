@@ -27,6 +27,8 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_GIT_IDENTITY_SYNC:=0}"
 : "${CODEX_CONTAINER_SANDBOX_GIT_NAME:=}"
 : "${CODEX_CONTAINER_SANDBOX_GIT_EMAIL:=}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH:=beads-sync}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -106,6 +108,7 @@ NOTES
   - Networking is enabled (no egress restrictions).
   - Web search tool is enabled (features.web_search_request=true).
   - Ensures `{workspace}/tmp/fetched/{web,pdf,images,other}` exists and is ignored via `.git/info/exclude` when possible.
+  - If the workspace is a git repo and has no `.beads/`, initializes Beads via `bd init --skip-hooks --skip-merge-driver` and migrates to a dedicated sync branch.
 EOF
 }
 
@@ -175,6 +178,54 @@ if git -C "$WORKSPACE_ROOT_HOST" rev-parse --git-dir >/dev/null 2>&1; then
         echo "# codex-container-sandbox: ignore workspace tmp artifacts"
         echo "tmp/"
       } >>"$exclude_file"
+    fi
+  fi
+fi
+
+# ----------------------------
+# Ensure Beads is initialized (host-side)
+#
+# This intentionally follows the repo's bd-workflow guidance:
+# - Never run plain `bd init` for agent sessions.
+# - Use `bd init --skip-hooks --skip-merge-driver`.
+# - Migrate to a dedicated sync branch so code branches remain clean.
+# ----------------------------
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:-0}" -ne 1 ]]; then
+  if git -C "$WORKSPACE_ROOT_HOST" rev-parse --git-dir >/dev/null 2>&1; then
+    if [[ ! -d "$WORKSPACE_ROOT_HOST/.beads" ]]; then
+      if command -v bd >/dev/null 2>&1; then
+        echo "[codex-container-sandbox] Beads: .beads/ not found; initializing in repo root: $WORKSPACE_ROOT_HOST" >&2
+        BEADS_DIR_HOST="$WORKSPACE_ROOT_HOST/.beads"
+        (
+          cd "$WORKSPACE_ROOT_HOST"
+          # Force Beads to use this repo's .beads directory even if we are inside
+          # a nested git repo (e.g., a git submodule under a parent repo with its
+          # own .beads/).
+          #
+          # Default to SQLite-backed storage unless the repo is already known to
+          # be JSONL-only (which would require an existing .beads/config.yaml).
+          BEADS_DIR="$BEADS_DIR_HOST" bd --db "$BEADS_DIR_HOST/beads.db" init --skip-hooks --skip-merge-driver
+        )
+
+        # Configure dedicated sync branch/worktree (keeps normal branches clean).
+        # If this fails (no upstream remote, permissions, etc.), warn and continue.
+        if [[ -n "${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH:-}" ]]; then
+          if git -C "$WORKSPACE_ROOT_HOST" remote get-url origin >/dev/null 2>&1; then
+            echo "[codex-container-sandbox] Beads: migrating to sync branch: $CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH" >&2
+            (
+              cd "$WORKSPACE_ROOT_HOST"
+              BEADS_DIR="$BEADS_DIR_HOST" bd migrate sync "$CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH" || {
+                echo "[codex-container-sandbox] WARN: Beads migrate sync failed; continuing without sync-branch workflow." >&2
+                exit 0
+              }
+            )
+          else
+            echo "[codex-container-sandbox] WARN: Beads: no git remote 'origin'; skipping sync-branch migration." >&2
+          fi
+        fi
+      else
+        echo "[codex-container-sandbox] WARN: Beads: `bd` not found on host; cannot auto-init .beads/." >&2
+      fi
     fi
   fi
 fi
