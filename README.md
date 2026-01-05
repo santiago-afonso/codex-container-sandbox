@@ -147,6 +147,26 @@ Disable with:
 codex-container-sandbox --no-print-codex-cmd exec "hello"
 ```
 
+### Git commit identity
+
+To avoid `git commit` failing with “Author identity unknown”, the wrapper will (by default)
+copy `user.name` / `user.email` from the host git config into a persistent container-global
+gitconfig under `CODEX_HOME`, and set `GIT_CONFIG_GLOBAL` accordingly.
+
+Override (or set explicitly if host identity is not set):
+
+```bash
+CODEX_CONTAINER_SANDBOX_GIT_NAME="Your Name" \
+CODEX_CONTAINER_SANDBOX_GIT_EMAIL="you@domain" \
+  codex-container-sandbox ...
+```
+
+Disable:
+
+```bash
+CODEX_CONTAINER_SANDBOX_DISABLE_GIT_IDENTITY_SYNC=1 codex-container-sandbox ...
+```
+
 ## Mount behavior
 
 - If you run inside a git repo, the **repo root** is mounted read-write.

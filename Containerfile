@@ -59,6 +59,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # - read-webpage-content-as-markdown: curl + markitdown
     # - pandoc: document conversion
     imagemagick poppler-utils pandoc \
+    # inspection / triage tools
+    file binutils xxd \
     # Needed for typst download/extract
     xz-utils \
     # Fonts for Typst output (minimal, broadly available)
@@ -92,6 +94,46 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 ENV CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 ENV GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
 ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt
+
+# WBG TLS interception can present certificates without Authority Key Identifier,
+# which breaks Python 3.14+ default HTTPS verification (OpenSSL strict mode).
+# We keep verification ON, but disable X509 strict checks in default contexts.
+ENV CODEX_PYTHON_SSL_DISABLE_X509_STRICT=1
+ENV PYTHONPATH=/usr/local/share/codex-python
+RUN mkdir -p /usr/local/share/codex-python \
+  && cat > /usr/local/share/codex-python/sitecustomize.py <<'PY'
+import os
+import ssl
+
+disable_strict = os.environ.get("CODEX_PYTHON_SSL_DISABLE_X509_STRICT", "0").strip().lower()
+
+if disable_strict in {"1", "true", "yes", "on"}:
+    original_create_default_context = ssl.create_default_context
+
+    def create_default_context(*args, **kwargs):
+        context = original_create_default_context(*args, **kwargs)
+        try:
+            context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+        except Exception:
+            pass
+        return context
+
+    ssl.create_default_context = create_default_context
+
+    original_create_default_https_context = getattr(ssl, "_create_default_https_context", None)
+    if original_create_default_https_context is not None:
+
+        def create_default_https_context(*args, **kwargs):
+            context = original_create_default_https_context(*args, **kwargs)
+            try:
+                context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+            except Exception:
+                pass
+            return context
+
+        ssl._create_default_https_context = create_default_https_context
+        ssl._create_stdlib_context = create_default_https_context
+PY
 
 # Bring in mq from the builder stage.
 COPY --from=mq_builder /opt/mq/bin/mq /usr/local/bin/mq

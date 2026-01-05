@@ -24,6 +24,9 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_HOMEBREW_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_HOMEBREW_PREFIX:=/home/linuxbrew/.linuxbrew}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_GIT_IDENTITY_SYNC:=0}"
+: "${CODEX_CONTAINER_SANDBOX_GIT_NAME:=}"
+: "${CODEX_CONTAINER_SANDBOX_GIT_EMAIL:=}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -156,6 +159,46 @@ fi
 # ----------------------------
 install -d -m 0700 "$CODEX_CONTAINER_SANDBOX_STATE_DIR"
 STATE_CONT="$CONTAINER_HOME/.codex"
+
+# ----------------------------
+# Optional: sync git identity into container global gitconfig
+#
+# This avoids "Author identity unknown" when making commits inside the container.
+# We write the config into the host state dir so it persists across runs, then
+# point GIT_CONFIG_GLOBAL at it in-container.
+# ----------------------------
+GIT_CONFIG_GLOBAL_HOST="$CODEX_CONTAINER_SANDBOX_STATE_DIR/gitconfig"
+GIT_NAME=""
+GIT_EMAIL=""
+
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_GIT_IDENTITY_SYNC:-0}" -ne 1 ]]; then
+  if [[ -n "${CODEX_CONTAINER_SANDBOX_GIT_NAME:-}" ]]; then
+    GIT_NAME="$CODEX_CONTAINER_SANDBOX_GIT_NAME"
+  else
+    GIT_NAME="$(git config --get user.name 2>/dev/null || true)"
+  fi
+
+  if [[ -n "${CODEX_CONTAINER_SANDBOX_GIT_EMAIL:-}" ]]; then
+    GIT_EMAIL="$CODEX_CONTAINER_SANDBOX_GIT_EMAIL"
+  else
+    GIT_EMAIL="$(git config --get user.email 2>/dev/null || true)"
+  fi
+
+  if command -v git >/dev/null 2>&1; then
+    if [[ -n "${GIT_NAME:-}" ]]; then
+      git config --file "$GIT_CONFIG_GLOBAL_HOST" user.name "$GIT_NAME" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${GIT_EMAIL:-}" ]]; then
+      git config --file "$GIT_CONFIG_GLOBAL_HOST" user.email "$GIT_EMAIL" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ -z "${GIT_NAME:-}" || -z "${GIT_EMAIL:-}" ]]; then
+    echo "[codex-container-sandbox] WARN: git identity not fully set (user.name/user.email); commits may fail." >&2
+    echo "[codex-container-sandbox]       Fix on host: git config --global user.name \"...\"; git config --global user.email \"...\"" >&2
+    echo "[codex-container-sandbox]       Or override: CODEX_CONTAINER_SANDBOX_GIT_NAME / CODEX_CONTAINER_SANDBOX_GIT_EMAIL" >&2
+  fi
+fi
 
 # ----------------------------
 # Optional: reuse host Codex auth.json
@@ -340,6 +383,18 @@ PODMAN_ARGS+=( --user "$(id -u):$(id -g)" )
 PODMAN_ARGS+=( --env "HOME=$CONTAINER_HOME" --env "USER=${USER:-codex}" )
 PODMAN_ARGS+=( --env "CODEX_HOME=$STATE_CONT" )
 PODMAN_ARGS+=( --workdir "$WORKSPACE_CONT" )
+
+# Use a persistent git global config under CODEX_HOME.
+# (git reads this env var as the preferred global config path)
+PODMAN_ARGS+=( --env "GIT_CONFIG_GLOBAL=$STATE_CONT/gitconfig" )
+
+# Also pass explicit author/committer identity if we have it.
+if [[ -n "${GIT_NAME:-}" ]]; then
+  PODMAN_ARGS+=( --env "GIT_AUTHOR_NAME=$GIT_NAME" --env "GIT_COMMITTER_NAME=$GIT_NAME" )
+fi
+if [[ -n "${GIT_EMAIL:-}" ]]; then
+  PODMAN_ARGS+=( --env "GIT_AUTHOR_EMAIL=$GIT_EMAIL" --env "GIT_COMMITTER_EMAIL=$GIT_EMAIL" )
+fi
 
 # Minimal PATH with typical user bins first (+ optional Homebrew)
 container_path="$CONTAINER_HOME/.local/bin:$CONTAINER_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
