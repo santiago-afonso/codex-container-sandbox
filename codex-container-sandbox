@@ -13,8 +13,12 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_PODMAN:=podman}"
 : "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:=}"
 : "${CODEX_CONTAINER_SANDBOX_AUTH_FILE:=}"
-: "${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE:=rw}"
+: "${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE:=ro}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_AUTH_MOUNT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_PROMPTS_DIR:=}"
+: "${CODEX_CONTAINER_SANDBOX_SKILLS_DIR:=}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_PROMPTS_MOUNT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_SKILLS_MOUNT:=0}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -160,6 +164,38 @@ if [[ -n "${AUTH_HOST:-}" ]]; then
   fi
 fi
 
+PROMPTS_HOST=""
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_PROMPTS_MOUNT:-0}" -ne 1 ]]; then
+  if [[ -n "${CODEX_CONTAINER_SANDBOX_PROMPTS_DIR:-}" ]]; then
+    PROMPTS_HOST="$CODEX_CONTAINER_SANDBOX_PROMPTS_DIR"
+  elif [[ -d "$HOME/.codex/prompts" ]]; then
+    PROMPTS_HOST="$HOME/.codex/prompts"
+  fi
+fi
+if [[ -n "${PROMPTS_HOST:-}" ]]; then
+  PROMPTS_HOST="$(readlink -f "$PROMPTS_HOST" 2>/dev/null || echo "$PROMPTS_HOST")"
+  if [[ ! -d "$PROMPTS_HOST" ]] || [[ ! -r "$PROMPTS_HOST" ]]; then
+    echo "[codex-container-sandbox] prompts dir not readable; skipping mount: $PROMPTS_HOST" >&2
+    PROMPTS_HOST=""
+  fi
+fi
+
+SKILLS_HOST=""
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_SKILLS_MOUNT:-0}" -ne 1 ]]; then
+  if [[ -n "${CODEX_CONTAINER_SANDBOX_SKILLS_DIR:-}" ]]; then
+    SKILLS_HOST="$CODEX_CONTAINER_SANDBOX_SKILLS_DIR"
+  elif [[ -d "$HOME/.codex/skills" ]]; then
+    SKILLS_HOST="$HOME/.codex/skills"
+  fi
+fi
+if [[ -n "${SKILLS_HOST:-}" ]]; then
+  SKILLS_HOST="$(readlink -f "$SKILLS_HOST" 2>/dev/null || echo "$SKILLS_HOST")"
+  if [[ ! -d "$SKILLS_HOST" ]] || [[ ! -r "$SKILLS_HOST" ]]; then
+    echo "[codex-container-sandbox] skills dir not readable; skipping mount: $SKILLS_HOST" >&2
+    SKILLS_HOST=""
+  fi
+fi
+
 # ----------------------------
 # Helper: map a host path -> container path
 #  - if under $HOME, preserve relative path under container home
@@ -230,7 +266,7 @@ PODMAN_ARGS+=( -v "$CODEX_CONTAINER_SANDBOX_STATE_DIR:$STATE_CONT:rw" )
 
 # Host auth.json (optional). Mount after CODEX_HOME dir so the file overlays.
 if [[ -n "${AUTH_HOST:-}" ]]; then
-  case "${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE:-rw}" in
+  case "${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE:-ro}" in
     ro|rw) ;;
     *)
       echo "[codex-container-sandbox] invalid CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE=${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE}; use ro or rw" >&2
@@ -238,6 +274,14 @@ if [[ -n "${AUTH_HOST:-}" ]]; then
       ;;
   esac
   PODMAN_ARGS+=( -v "$AUTH_HOST:$STATE_CONT/auth.json:${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE}" )
+fi
+
+# Host prompts/skills (optional). Mount after CODEX_HOME dir so they overlay and remain RO.
+if [[ -n "${PROMPTS_HOST:-}" ]]; then
+  PODMAN_ARGS+=( -v "$PROMPTS_HOST:$STATE_CONT/prompts:ro" )
+fi
+if [[ -n "${SKILLS_HOST:-}" ]]; then
+  PODMAN_ARGS+=( -v "$SKILLS_HOST:$STATE_CONT/skills:ro" )
 fi
 
 # Extra mounts from config/flags

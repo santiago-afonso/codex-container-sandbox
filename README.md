@@ -137,7 +137,23 @@ into the container so `codex` doesn't prompt for login again:
 - Auto-detects and mounts `~/.codex/auth.json` if it exists.
 - Override the path with `CODEX_CONTAINER_SANDBOX_AUTH_FILE=/path/to/auth.json`.
 - Disable mounting entirely with `CODEX_CONTAINER_SANDBOX_DISABLE_AUTH_MOUNT=1`.
-- Control mount mode (default `rw`) with `CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE=ro|rw`.
+- Control mount mode (default `ro`) with `CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE=ro|rw`.
+
+### Reuse host prompts and skills (optional)
+
+To keep prompts and skills consistent with your host setup, the wrapper can also mount:
+
+- `~/.codex/prompts` -> `$CODEX_HOME/prompts` (read-only)
+- `~/.codex/skills` -> `$CODEX_HOME/skills` (read-only)
+
+Controls:
+
+- Override paths:
+  - `CODEX_CONTAINER_SANDBOX_PROMPTS_DIR=/path/to/prompts`
+  - `CODEX_CONTAINER_SANDBOX_SKILLS_DIR=/path/to/skills`
+- Disable:
+  - `CODEX_CONTAINER_SANDBOX_DISABLE_PROMPTS_MOUNT=1`
+  - `CODEX_CONTAINER_SANDBOX_DISABLE_SKILLS_MOUNT=1`
 
 ## Security note
 
