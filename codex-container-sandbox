@@ -20,6 +20,10 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_PROMPTS_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_SKILLS_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_HOMEBREW_MOUNT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_HOMEBREW_PREFIX:=/home/linuxbrew/.linuxbrew}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -216,11 +220,56 @@ add_ro_mount_unique() {
 
 # Host ~/.local/bin (optional). Useful for host-installed helper CLIs like read-pdf.
 if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT:-0}" -ne 1 ]]; then
-  if command -v read-pdf >/dev/null 2>&1; then
-    read_pdf_host="$(command -v read-pdf 2>/dev/null || true)"
-    if [[ "$read_pdf_host" == "$HOME/.local/bin/read-pdf" ]] && [[ -d "$HOME/.local/bin" ]]; then
-      add_ro_mount_unique "$HOME/.local/bin"
-    fi
+  if [[ -d "$HOME/.local/bin" ]]; then
+    for tool in read-pdf ttok markitdown; do
+      if command -v "$tool" >/dev/null 2>&1; then
+        tool_path="$(command -v "$tool" 2>/dev/null || true)"
+        if [[ "$tool_path" == "$HOME/.local/bin/$tool" ]]; then
+          add_ro_mount_unique "$HOME/.local/bin"
+          break
+        fi
+      fi
+    done
+  fi
+fi
+
+# Host uv tools (optional). Needed when host CLIs in ~/.local/bin are symlinks to
+# ~/.local/share/uv/tools/... (common for uv tool installs like ttok/markitdown).
+UV_TOOLS_HOST=""
+UV_PYTHON_HOST=""
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT:-0}" -ne 1 ]]; then
+  uv_tools_default="$HOME/.local/share/uv/tools"
+  if [[ -d "$uv_tools_default" ]]; then
+    for tool in ttok markitdown; do
+      if command -v "$tool" >/dev/null 2>&1; then
+        tool_path="$(command -v "$tool" 2>/dev/null || true)"
+        tool_target="$(readlink -f "$tool_path" 2>/dev/null || echo "$tool_path")"
+        if [[ "$tool_target" == "$uv_tools_default/"* ]]; then
+          UV_TOOLS_HOST="$uv_tools_default"
+          if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT:-0}" -ne 1 ]] && [[ -d "$HOME/.local/share/uv/python" ]]; then
+            UV_PYTHON_HOST="$HOME/.local/share/uv/python"
+          fi
+          break
+        fi
+      fi
+    done
+  fi
+fi
+
+HOMEBREW_HOST=""
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_HOMEBREW_MOUNT:-0}" -ne 1 ]]; then
+  brew_prefix="${CODEX_CONTAINER_SANDBOX_HOMEBREW_PREFIX:-/home/linuxbrew/.linuxbrew}"
+  if [[ -d "$brew_prefix" ]]; then
+    for tool in pandoc mq yq jq; do
+      if command -v "$tool" >/dev/null 2>&1; then
+        tool_path="$(command -v "$tool" 2>/dev/null || true)"
+        tool_target="$(readlink -f "$tool_path" 2>/dev/null || echo "$tool_path")"
+        if [[ "$tool_target" == "$brew_prefix/"* ]]; then
+          HOMEBREW_HOST="$brew_prefix"
+          break
+        fi
+      fi
+    done
   fi
 fi
 
@@ -280,8 +329,12 @@ PODMAN_ARGS+=( --env "HOME=$CONTAINER_HOME" --env "USER=${USER:-codex}" )
 PODMAN_ARGS+=( --env "CODEX_HOME=$STATE_CONT" )
 PODMAN_ARGS+=( --workdir "$WORKSPACE_CONT" )
 
-# Minimal PATH with typical user bins first
-PODMAN_ARGS+=( --env "PATH=$CONTAINER_HOME/.local/bin:$CONTAINER_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" )
+# Minimal PATH with typical user bins first (+ optional Homebrew)
+container_path="$CONTAINER_HOME/.local/bin:$CONTAINER_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+if [[ -n "${HOMEBREW_HOST:-}" ]]; then
+  container_path="$container_path:$HOMEBREW_HOST/bin"
+fi
+PODMAN_ARGS+=( --env "PATH=$container_path" )
 
 # Put common tool caches inside the mounted state dir by default.
 PODMAN_ARGS+=( --env "XDG_CACHE_HOME=$STATE_CONT/cache" )
@@ -310,6 +363,18 @@ if [[ -n "${PROMPTS_HOST:-}" ]]; then
 fi
 if [[ -n "${SKILLS_HOST:-}" ]]; then
   PODMAN_ARGS+=( -v "$SKILLS_HOST:$STATE_CONT/skills:ro" )
+fi
+
+# Host uv tools and Homebrew prefix (optional). These are mounted to their
+# original absolute paths to keep host-installed symlinks and ELF RPATHs working.
+if [[ -n "${UV_TOOLS_HOST:-}" ]]; then
+  PODMAN_ARGS+=( -v "$UV_TOOLS_HOST:$UV_TOOLS_HOST:ro" )
+fi
+if [[ -n "${UV_PYTHON_HOST:-}" ]]; then
+  PODMAN_ARGS+=( -v "$UV_PYTHON_HOST:$UV_PYTHON_HOST:ro" )
+fi
+if [[ -n "${HOMEBREW_HOST:-}" ]]; then
+  PODMAN_ARGS+=( -v "$HOMEBREW_HOST:$HOMEBREW_HOST:ro" )
 fi
 
 # Extra mounts from config/flags

@@ -167,6 +167,35 @@ Disable with:
 CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT=1 codex-container-sandbox ...
 ```
 
+### Reuse host CLIs (ttok/markitdown, pandoc/mq/yq/jq)
+
+If you install CLIs on the host via:
+
+- `uv tool install ...` (often creates symlinks under `~/.local/bin` pointing at `~/.local/share/uv/tools/...`)
+- Homebrew on Linux (e.g., `/home/linuxbrew/.linuxbrew/bin/...`)
+
+the wrapper can mount the needed host directories read-only so those tools work inside the container.
+
+Defaults (best-effort, only when detected):
+
+- Mount `~/.local/share/uv/tools` read-only when `ttok` or `markitdown` is detected as a uv tool install.
+- Also mount `~/.local/share/uv/python` read-only (needed for uv tool shebang interpreters) when present.
+- Mount `/home/linuxbrew/.linuxbrew` read-only when one of `pandoc`, `mq`, `yq`, `jq` is detected under that prefix, and add its `bin/` to `$PATH`.
+
+Disable:
+
+```bash
+CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT=1 codex-container-sandbox ...
+CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT=1 codex-container-sandbox ...
+CODEX_CONTAINER_SANDBOX_DISABLE_HOMEBREW_MOUNT=1 codex-container-sandbox ...
+```
+
+Override Homebrew prefix:
+
+```bash
+CODEX_CONTAINER_SANDBOX_HOMEBREW_PREFIX=/some/other/prefix codex-container-sandbox ...
+```
+
 ## Security note
 
 This wrapper is about **filesystem isolation** (mount boundaries), not egress safety.
