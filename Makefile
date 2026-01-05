@@ -9,6 +9,9 @@ IMAGE ?= localhost/codex-container-sandbox:latest
 NPM_REGISTRY ?= https://registry.npmjs.com/
 CODEX_NPM_PKG ?= @openai/codex@latest
 EXTRA_CA_CERT_PATH ?=
+MQ_VERSION ?= 0.5.9
+TYPST_VERSION ?= 0.14.2
+TYPST_TARGET ?= x86_64-unknown-linux-musl
 
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
@@ -42,6 +45,9 @@ image:
 	fi; \
 	"$(PODMAN)" build --runtime "$(PODMAN_RUNTIME)" \
 		$$extra_ca_arg \
+		--build-arg MQ_VERSION="$(MQ_VERSION)" \
+		--build-arg TYPST_VERSION="$(TYPST_VERSION)" \
+		--build-arg TYPST_TARGET="$(TYPST_TARGET)" \
 		--build-arg NPM_REGISTRY="$(NPM_REGISTRY)" \
 		--build-arg CODEX_NPM_PKG="$(CODEX_NPM_PKG)" \
 		-t "$(IMAGE)" -f Containerfile .

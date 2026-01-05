@@ -226,7 +226,7 @@ add_ro_mount_unique() {
 # Host ~/.local/bin (optional). Useful for host-installed helper CLIs like read-pdf.
 if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT:-0}" -ne 1 ]]; then
   if [[ -d "$HOME/.local/bin" ]]; then
-    for tool in read-pdf ttok markitdown; do
+    for tool in read-pdf ttok; do
       if command -v "$tool" >/dev/null 2>&1; then
         tool_path="$(command -v "$tool" 2>/dev/null || true)"
         if [[ "$tool_path" == "$HOME/.local/bin/$tool" ]]; then
@@ -245,7 +245,9 @@ UV_PYTHON_HOST=""
 if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT:-0}" -ne 1 ]]; then
   uv_tools_default="$HOME/.local/share/uv/tools"
   if [[ -d "$uv_tools_default" ]]; then
-    for tool in ttok markitdown; do
+    # The image ships with markitdown; only auto-mount uv tools when we need a
+    # host-installed uv tool (e.g., ttok).
+    for tool in ttok; do
       if command -v "$tool" >/dev/null 2>&1; then
         tool_path="$(command -v "$tool" 2>/dev/null || true)"
         tool_target="$(readlink -f "$tool_path" 2>/dev/null || echo "$tool_path")"
@@ -265,7 +267,9 @@ HOMEBREW_HOST=""
 if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_HOMEBREW_MOUNT:-0}" -ne 1 ]]; then
   brew_prefix="${CODEX_CONTAINER_SANDBOX_HOMEBREW_PREFIX:-/home/linuxbrew/.linuxbrew}"
   if [[ -d "$brew_prefix" ]]; then
-    for tool in pandoc mq yq jq; do
+    # The image ships with pandoc + mq. Only auto-mount Homebrew for tools we
+    # intentionally don't vendor into the image.
+    for tool in yq jq; do
       if command -v "$tool" >/dev/null 2>&1; then
         tool_path="$(command -v "$tool" 2>/dev/null || true)"
         tool_target="$(readlink -f "$tool_path" 2>/dev/null || echo "$tool_path")"

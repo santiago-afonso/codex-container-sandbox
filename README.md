@@ -40,6 +40,12 @@ make install EXTRA_CA_CERT_PATH=$HOME/wbg_root_ca_g2.cer
 If `~/wbg_root_ca_g2.cer` exists, the Makefile auto-detects it when
 `EXTRA_CA_CERT_PATH` is not set.
 
+You can also override bundled tool versions:
+
+```bash
+make install MQ_VERSION=0.5.9 TYPST_VERSION=0.14.2 TYPST_TARGET=x86_64-unknown-linux-musl
+```
+
 ### 2) Install the wrapper
 
 ```bash
@@ -167,7 +173,18 @@ Disable with:
 CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT=1 codex-container-sandbox ...
 ```
 
-### Reuse host CLIs (ttok/markitdown, pandoc/mq/yq/jq)
+### Built-in tools (image is self-sufficient)
+
+The image ships with a few common “skills dependencies” so you don’t need host mounts:
+
+- `imagemagick` (`convert`, `identify`) for `image-crop`
+- `poppler-utils` (`pdfinfo`, `pdftoppm`) for `read-pdf --as-images`
+- `markitdown` for `read-webpage-content-as-markdown` and `read-pdf --as-text-fast`
+- `pandoc`
+- `mq`
+- `typst`
+
+### Reuse host CLIs (optional; for extra tools/versions)
 
 If you install CLIs on the host via:
 
@@ -178,9 +195,9 @@ the wrapper can mount the needed host directories read-only so those tools work 
 
 Defaults (best-effort, only when detected):
 
-- Mount `~/.local/share/uv/tools` read-only when `ttok` or `markitdown` is detected as a uv tool install.
+- Mount `~/.local/share/uv/tools` read-only when `ttok` is detected as a uv tool install.
 - Also mount `~/.local/share/uv/python` read-only (needed for uv tool shebang interpreters) when present.
-- Mount `/home/linuxbrew/.linuxbrew` read-only when one of `pandoc`, `mq`, `yq`, `jq` is detected under that prefix, and add its `bin/` to `$PATH`.
+- Mount `/home/linuxbrew/.linuxbrew` read-only when one of `yq` or `jq` is detected under that prefix, and add its `bin/` to `$PATH`.
 
 Disable:
 
