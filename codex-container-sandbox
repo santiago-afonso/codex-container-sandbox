@@ -29,6 +29,7 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_GIT_EMAIL:=}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH:=beads-sync}"
+: "${CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT:=}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -134,6 +135,53 @@ while [[ $# -gt 0 ]]; do
     *) CODEX_ARGS+=("$1"); shift ;;
   esac
 done
+
+# ----------------------------
+# Optional: resume initial prompt stub (empty by default)
+#
+# `codex resume [SESSION_ID] [PROMPT]` supports a positional PROMPT that is
+# applied immediately when resuming a session. We keep a hook to inject a default
+# prompt for resume workflows; by default it is empty (no injection).
+# ----------------------------
+if [[ -n "${CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT:-}" ]]; then
+  if [[ "${#CODEX_ARGS[@]}" -ge 1 ]] && [[ "${CODEX_ARGS[0]}" == "resume" || "${CODEX_ARGS[0]}" == "r" ]]; then
+    # Count resume positional args (SESSION_ID, PROMPT) after stripping known options.
+    # Only inject if fewer than 2 positionals are present (i.e., no user prompt yet).
+    resume_positionals=()
+    i=1
+    while [[ "$i" -lt "${#CODEX_ARGS[@]}" ]]; do
+      arg="${CODEX_ARGS[$i]}"
+      if [[ "$arg" == "--" ]]; then
+        i=$((i + 1))
+        while [[ "$i" -lt "${#CODEX_ARGS[@]}" ]]; do
+          resume_positionals+=( "${CODEX_ARGS[$i]}" )
+          i=$((i + 1))
+        done
+        break
+      fi
+
+      case "$arg" in
+        -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
+          i=$((i + 2))
+          ;;
+        --last|--all|--oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|-h|--help|-V|--version)
+          i=$((i + 1))
+          ;;
+        -*)
+          i=$((i + 1))
+          ;;
+        *)
+          resume_positionals+=( "$arg" )
+          i=$((i + 1))
+          ;;
+      esac
+    done
+
+    if [[ "${#resume_positionals[@]}" -lt 2 ]]; then
+      CODEX_ARGS+=( "$CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT" )
+    fi
+  fi
+fi
 
 # ----------------------------
 # Compute workspace mount
@@ -506,11 +554,20 @@ PODMAN_ARGS+=( --env "PATH=$container_path" )
 # Ensure `bash -c ...` and `bash -lc ...` subprocesses see the same PATH.
 # Many agent tool runners invoke commands via non-interactive shells and some use
 # `bash -lc`, which resets PATH via /etc/profile; BASH_ENV lets us restore it.
+#
+# Note: In some sandboxed harnesses, writing to $XDG_STATE_HOME may be blocked;
+# treat BASH_ENV creation as best-effort (do not fail the wrapper).
 BASH_ENV_HOST="$CODEX_CONTAINER_SANDBOX_STATE_DIR/bash_env.sh"
-cat >"$BASH_ENV_HOST" <<EOF
+if [[ ! -f "$BASH_ENV_HOST" ]]; then
+  if { umask 077 && cat >"$BASH_ENV_HOST" <<EOF
 export PATH=$(printf '%q' "$container_path")
 EOF
-chmod 0600 "$BASH_ENV_HOST"
+  }; then
+    chmod 0600 "$BASH_ENV_HOST" >/dev/null 2>&1 || true
+  else
+    echo "[codex-container-sandbox] WARN: could not write $BASH_ENV_HOST; PATH inside bash -lc may be incomplete." >&2
+  fi
+fi
 PODMAN_ARGS+=( --env "BASH_ENV=$STATE_CONT/bash_env.sh" )
 
 # Put common tool caches inside the mounted state dir by default.
