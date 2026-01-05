@@ -118,6 +118,15 @@ codex-container-sandbox --shell
 CODEX_CONTAINER_SANDBOX_DEBUG=1 codex-container-sandbox exec "hello"
 ```
 
+### Hide the printed `codex ...` command
+
+By default the wrapper prints the computed `codex ...` command (to stderr) before starting.
+Disable with:
+
+```bash
+codex-container-sandbox --no-print-codex-cmd exec "hello"
+```
+
 ## Mount behavior
 
 - If you run inside a git repo, the **repo root** is mounted read-write.

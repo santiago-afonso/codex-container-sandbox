@@ -29,7 +29,8 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
 
 # If set to 1, prints the `codex ...` command invoked inside the container.
-: "${CODEX_CONTAINER_SANDBOX_PRINT_CODEX_CMD:=0}"
+# Default: on (so it's obvious what is being executed in-container).
+: "${CODEX_CONTAINER_SANDBOX_PRINT_CODEX_CMD:=1}"
 
 # If set to 1, keeps the container after exit (useful for debugging).
 : "${CODEX_CONTAINER_SANDBOX_PERSIST:=0}"
@@ -91,7 +92,8 @@ OPTIONS
   --rw PATH        Bind-mount PATH read-write (repeatable)
   --state DIR      Host state dir for Codex HOME inside container
   --debug          Print the computed podman command
-  --print-codex-cmd Print the computed `codex ...` command
+  --print-codex-cmd Print the computed `codex ...` command (default)
+  --no-print-codex-cmd Disable printing the `codex ...` command
   --persist        Do not --rm the container (keeps it for inspection)
   --shell          Start an interactive shell in the container instead of running codex
   -h, --help       Show this help
@@ -117,6 +119,7 @@ while [[ $# -gt 0 ]]; do
     --state) CODEX_CONTAINER_SANDBOX_STATE_DIR="${2:?missing DIR}"; shift 2 ;;
     --debug) CODEX_CONTAINER_SANDBOX_DEBUG=1; shift ;;
     --print-codex-cmd) CODEX_CONTAINER_SANDBOX_PRINT_CODEX_CMD=1; shift ;;
+    --no-print-codex-cmd) CODEX_CONTAINER_SANDBOX_PRINT_CODEX_CMD=0; shift ;;
     --persist) CODEX_CONTAINER_SANDBOX_PERSIST=1; shift ;;
     --shell) RUN_SHELL=1; shift ;;
     -h|--help) usage; exit 0 ;;
