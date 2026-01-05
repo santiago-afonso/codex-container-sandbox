@@ -38,6 +38,12 @@ This image intentionally vendors multiple fast-moving tools. To keep it maintain
   - Run a minimal in-container smoke check: `python3 --version`, `uv --version`, `codex --version`, `playwright --version`, and any key CLIs (pdf/image/web).
   - Update `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` if behavior/tooling changes.
 
+## Corporate TLS Workarounds (host-specific)
+
+- This repo supports building with an extra corporate root CA via `EXTRA_CA_CERT_PATH`.
+- Auto-detection of `~/wbg_root_ca_g2.cer` is intentionally restricted to the WBG laptop hostname (`PCACL-G7MKN94`).
+- Do not enable corporate CA injection or related TLS workarounds by default on non-corporate machines (e.g., home networks).
+
 ## Portability Workflow (repeatable)
 
 When a new tool/skill is added on the host and you want it usable inside the container, follow this sequence:
@@ -84,3 +90,4 @@ When a new tool/skill is added on the host and you want it usable inside the con
 - 2026-01-05: Enterprise TLS MITM requires explicit CA injection during image build; avoid insecure npm/curl flags.
 - 2026-01-05: WSL portability: default Podman runtime to `runc` (override via env) when `crun` is flaky.
 - 2026-01-05: Keep `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` updated; agents write artifacts under `{workspace}/tmp`.
+- 2026-01-05: Corporate CA auto-detect only on host `PCACL-G7MKN94`; home builds must not inject WBG CA by default.

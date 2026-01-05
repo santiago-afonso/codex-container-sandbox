@@ -98,7 +98,8 @@ ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt
 # WBG TLS interception can present certificates without Authority Key Identifier,
 # which breaks Python 3.14+ default HTTPS verification (OpenSSL strict mode).
 # We keep verification ON, but disable X509 strict checks in default contexts.
-ENV CODEX_PYTHON_SSL_DISABLE_X509_STRICT=1
+ARG ENABLE_CORP_TLS_WORKAROUNDS="0"
+ENV CODEX_PYTHON_SSL_DISABLE_X509_STRICT=${ENABLE_CORP_TLS_WORKAROUNDS}
 ENV PYTHONPATH=/usr/local/share/codex-python
 RUN mkdir -p /usr/local/share/codex-python \
   && cat > /usr/local/share/codex-python/sitecustomize.py <<'PY'

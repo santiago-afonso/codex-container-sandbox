@@ -38,7 +38,9 @@ image:
 	@command -v "$(PODMAN)" >/dev/null 2>&1 || { echo "$(PODMAN) not found on PATH" >&2; exit 1; }
 	@extra_ca_arg=""; \
 	extra_ca_path="$(EXTRA_CA_CERT_PATH)"; \
-	if [ -z "$$extra_ca_path" ] && [ -r "$$HOME/wbg_root_ca_g2.cer" ]; then \
+	# Only auto-detect the WBG root cert on the IT-managed WBG laptop. \
+	# On other machines (e.g., home), do not attempt corporate CA injection unless explicitly configured. \
+	if [ -z "$$extra_ca_path" ] && [ "$$(hostname 2>/dev/null || true)" = "PCACL-G7MKN94" ] && [ -r "$$HOME/wbg_root_ca_g2.cer" ]; then \
 		extra_ca_path="$$HOME/wbg_root_ca_g2.cer"; \
 		echo "Auto-detected EXTRA_CA_CERT_PATH=$$extra_ca_path" >&2; \
 	fi; \
@@ -50,8 +52,14 @@ image:
 		extra_ca_b64="$$(base64 -w 0 "$$extra_ca_path" 2>/dev/null || base64 "$$extra_ca_path" | tr -d '\n')"; \
 		extra_ca_arg="--build-arg EXTRA_CA_CERT_B64=$$extra_ca_b64"; \
 	fi; \
+	# Enable Python/OpenSSL strict-mode workaround only when we are injecting a corporate CA. \
+	tls_workaround_arg="--build-arg ENABLE_CORP_TLS_WORKAROUNDS=0"; \
+	if [ -n "$$extra_ca_path" ]; then \
+		tls_workaround_arg="--build-arg ENABLE_CORP_TLS_WORKAROUNDS=1"; \
+	fi; \
 	"$(PODMAN)" build --runtime "$(PODMAN_RUNTIME)" \
 		$$extra_ca_arg \
+		$$tls_workaround_arg \
 		--build-arg MQ_VERSION="$(MQ_VERSION)" \
 		--build-arg TYPST_VERSION="$(TYPST_VERSION)" \
 		--build-arg TYPST_TARGET="$(TYPST_TARGET)" \
