@@ -118,6 +118,16 @@ RUN curl -fsSL \
   && install -m 0755 "/tmp/typst-${TYPST_TARGET}/typst" /usr/local/bin/typst \
   && rm -rf "/tmp/typst-${TYPST_TARGET}" /tmp/typst.tar.xz
 
+# Install Beads (bd) CLI (prebuilt binary).
+ARG BEADS_VERSION="0.44.0"
+ARG BEADS_PLATFORM="linux_amd64"
+RUN curl -fsSL \
+      "https://github.com/steveyegge/beads/releases/download/v${BEADS_VERSION}/beads_${BEADS_VERSION}_${BEADS_PLATFORM}.tar.gz" \
+      -o /tmp/beads.tar.gz \
+  && tar -xzf /tmp/beads.tar.gz -C /tmp \
+  && install -m 0755 /tmp/bd /usr/local/bin/bd \
+  && rm -rf /tmp/beads.tar.gz /tmp/bd /tmp/CHANGELOG.md /tmp/LICENSE /tmp/README.md
+
 # read-webpage-content-as-markdown + read-pdf both rely on `markitdown`.
 # Install it as a uv tool (so it's self-contained and uses uv-managed Python).
 RUN uv tool install --python "${UV_DEFAULT_PYTHON}" "markitdown[pdf]" \

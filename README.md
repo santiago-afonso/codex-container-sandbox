@@ -211,6 +211,7 @@ The image ships with a few common “skills dependencies” so you don’t need 
 - `mq`
 - `typst`
 - `chromium` + `playwright` (JS/client-rendered pages)
+- `bd` (Beads issue tracker)
 
 ### Reuse host CLIs (optional; for extra tools/versions)
 
