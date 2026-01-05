@@ -31,11 +31,14 @@ If you're on a corporate network with an npm mirror, override the registry:
 make install NPM_REGISTRY=https://your-registry.example.com/
 ```
 
-If TLS is intercepted (self-signed cert in chain), pass a corporate root CA cert:
+If TLS is intercepted (transparent proxy / self-signed in chain), pass a corporate root CA cert:
 
 ```bash
 make install EXTRA_CA_CERT_PATH=$HOME/wbg_root_ca_g2.cer
 ```
+
+If `~/wbg_root_ca_g2.cer` exists, the Makefile auto-detects it when
+`EXTRA_CA_CERT_PATH` is not set.
 
 ### 2) Install the wrapper
 
@@ -49,6 +52,9 @@ Create `~/.config/codex-container-sandbox/config.sh`:
 
 ```bash
 CODEX_CONTAINER_SANDBOX_IMAGE="localhost/codex-container-sandbox:latest"
+
+# Optional: force an OCI runtime (useful on some WSL/work setups).
+# CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="runc"
 
 # Mount helper tools read-only (mapped under /home/codex/...)
 CODEX_CONTAINER_SANDBOX_RO_MOUNTS=(

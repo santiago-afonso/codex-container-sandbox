@@ -11,6 +11,7 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/codex-container-sandbox}"
 : "${CODEX_CONTAINER_SANDBOX_CONFIG_FILE:=${XDG_CONFIG_HOME:-$HOME/.config}/codex-container-sandbox/config.sh}"
 : "${CODEX_CONTAINER_SANDBOX_PODMAN:=podman}"
+: "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:=}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -156,6 +157,18 @@ map_path() {
 # Build podman args
 # ----------------------------
 PODMAN_ARGS=()
+
+# OCI runtime.
+# On some WSL environments, `crun` may fail with "unknown version specified";
+# default to `runc` there unless the user explicitly overrides.
+if [[ -z "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:-}" ]]; then
+  if uname -r 2>/dev/null | grep -qiE 'microsoft|wsl'; then
+    CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="runc"
+  fi
+fi
+if [[ -n "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:-}" ]]; then
+  PODMAN_ARGS+=( --runtime "$CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME" )
+fi
 
 # tty / interactive only if stdout is a tty
 if [[ -t 0 && -t 1 ]]; then
