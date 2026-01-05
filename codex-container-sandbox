@@ -28,6 +28,9 @@ set -euo pipefail
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
 
+# If set to 1, prints the `codex ...` command invoked inside the container.
+: "${CODEX_CONTAINER_SANDBOX_PRINT_CODEX_CMD:=0}"
+
 # If set to 1, keeps the container after exit (useful for debugging).
 : "${CODEX_CONTAINER_SANDBOX_PERSIST:=0}"
 
@@ -88,6 +91,7 @@ OPTIONS
   --rw PATH        Bind-mount PATH read-write (repeatable)
   --state DIR      Host state dir for Codex HOME inside container
   --debug          Print the computed podman command
+  --print-codex-cmd Print the computed `codex ...` command
   --persist        Do not --rm the container (keeps it for inspection)
   --shell          Start an interactive shell in the container instead of running codex
   -h, --help       Show this help
@@ -112,6 +116,7 @@ while [[ $# -gt 0 ]]; do
     --rw) SANDBOX_RW_MOUNTS+=("${2:?missing PATH}"); shift 2 ;;
     --state) CODEX_CONTAINER_SANDBOX_STATE_DIR="${2:?missing DIR}"; shift 2 ;;
     --debug) CODEX_CONTAINER_SANDBOX_DEBUG=1; shift ;;
+    --print-codex-cmd) CODEX_CONTAINER_SANDBOX_PRINT_CODEX_CMD=1; shift ;;
     --persist) CODEX_CONTAINER_SANDBOX_PERSIST=1; shift ;;
     --shell) RUN_SHELL=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -482,6 +487,12 @@ fi
 # Run
 # ----------------------------
 FULL_CMD=( "$CODEX_CONTAINER_SANDBOX_PODMAN" run "${PODMAN_ARGS[@]}" "$CODEX_CONTAINER_SANDBOX_IMAGE" "${CONTAINER_CMD[@]}" )
+
+if [[ "$CODEX_CONTAINER_SANDBOX_DEBUG" -eq 1 || "$CODEX_CONTAINER_SANDBOX_PRINT_CODEX_CMD" -eq 1 ]]; then
+  echo "[codex-container-sandbox] container cmd:" >&2
+  printf '  %q' "${CONTAINER_CMD[@]}" >&2
+  echo >&2
+fi
 
 if [[ "$CODEX_CONTAINER_SANDBOX_DEBUG" -eq 1 ]]; then
   echo "[codex-container-sandbox] podman cmd:" >&2
