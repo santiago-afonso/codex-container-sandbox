@@ -105,6 +105,7 @@ NOTES
   - Always runs codex with --dangerously-bypass-approvals-and-sandbox and --sandbox danger-full-access.
   - Networking is enabled (no egress restrictions).
   - Web search tool is enabled (features.web_search_request=true).
+  - Ensures `{workspace}/tmp/fetched/{web,pdf,images,other}` exists and is ignored via `.git/info/exclude` when possible.
 EOF
 }
 
@@ -144,6 +145,39 @@ WORKSPACE_ROOT_HOST="$(readlink -f "$WORKSPACE_ROOT_HOST")"
 WORKSPACE_BASE="$(basename "$WORKSPACE_ROOT_HOST")"
 CONTAINER_HOME="$CODEX_CONTAINER_SANDBOX_CONTAINER_HOME"
 WORKSPACE_ROOT_CONT="$CONTAINER_HOME/$WORKSPACE_BASE"
+
+# ----------------------------
+# Ensure workspace tmp structure exists (host-side)
+#
+# Agents should always write temporary artifacts to `{workspace}/tmp/...`.
+# Creating these ahead of time reduces friction and keeps the structure consistent.
+#
+# We also try to ignore `tmp/` via `.git/info/exclude` (repo-local, uncommitted),
+# so these artifacts don't show up in `git status`.
+# ----------------------------
+mkdir -p \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/web" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/pdf" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/images" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/other"
+
+if git -C "$WORKSPACE_ROOT_HOST" rev-parse --git-dir >/dev/null 2>&1; then
+  git_dir="$(git -C "$WORKSPACE_ROOT_HOST" rev-parse --git-dir)"
+  if [[ "$git_dir" != /* ]]; then
+    git_dir="$WORKSPACE_ROOT_HOST/$git_dir"
+  fi
+
+  exclude_file="$git_dir/info/exclude"
+  if [[ -w "$exclude_file" ]]; then
+    if ! grep -qxF "tmp/" "$exclude_file" 2>/dev/null; then
+      {
+        echo ""
+        echo "# codex-container-sandbox: ignore workspace tmp artifacts"
+        echo "tmp/"
+      } >>"$exclude_file"
+    fi
+  fi
+fi
 
 if [[ "$WORKSPACE_HOST" == "$WORKSPACE_ROOT_HOST" ]]; then
   WORKSPACE_CONT="$WORKSPACE_ROOT_CONT"

@@ -33,6 +33,7 @@ Create these subfolders as needed and place files in the most specific bucket:
 Notes:
 - Prefer deterministic, descriptive filenames (include domain/date/slug when practical).
 - Keep any “processed” artifacts next to the input folder when it’s clearly tied to a specific fetch (e.g. rendered PDF pages under `tmp/fetched/pdf/<doc-stem>/pages/`).
+- The `codex-container-sandbox` wrapper pre-creates these folders and attempts to ignore `tmp/` via `.git/info/exclude` (repo-local, uncommitted).
 
 This includes:
 - rendered PDF page images
