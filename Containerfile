@@ -98,6 +98,9 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages uv
 # Installing it in the image avoids depending on host uv-tool mounts.
 RUN python3 -m pip install --no-cache-dir --break-system-packages "markitdown[pdf]"
 
+# Force Node to use the OS CA store (including any EXTRA_CA_CERT_B64 we installed).
+ENV NODE_OPTIONS="--use-openssl-ca"
+
 # Install the Codex CLI.
 # Allow overriding the npm registry (e.g., corporate mirror) and/or package spec.
 ARG NPM_REGISTRY="https://registry.npmjs.org/"
@@ -106,9 +109,24 @@ RUN npm config set registry "${NPM_REGISTRY}" \
   && npm config set cafile /etc/ssl/certs/ca-certificates.crt \
   && npm install -g "${CODEX_NPM_PKG}"
 
+# Playwright + headless Chromium (for JS/client-rendered pages).
+#
+# Notes:
+# - We install a system chromium as a fallback.
+# - We also install Playwright and (by default) its bundled Chromium browser so
+#   "playwright chromium" works out-of-the-box.
+ARG INSTALL_PLAYWRIGHT_BROWSERS="1"
+ARG PLAYWRIGHT_NPM_PKG="playwright@latest"
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+  && rm -rf /var/lib/apt/lists/*
+RUN npm install -g "${PLAYWRIGHT_NPM_PKG}" \
+  && if [ "${INSTALL_PLAYWRIGHT_BROWSERS}" = "1" ]; then \
+       playwright install chromium; \
+     fi
+
 # Provide a predictable HOME for the wrapper (and make it writable for arbitrary UIDs).
 ENV HOME=/home/codex
-# Force Node to use the OS CA store (including any EXTRA_CA_CERT_B64 we installed).
-ENV NODE_OPTIONS="--use-openssl-ca"
 RUN mkdir -p "$HOME" && chmod 0777 "$HOME"
 WORKDIR /home/codex

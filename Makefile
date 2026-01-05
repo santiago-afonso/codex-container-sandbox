@@ -12,6 +12,8 @@ EXTRA_CA_CERT_PATH ?=
 MQ_VERSION ?= 0.5.9
 TYPST_VERSION ?= 0.14.2
 TYPST_TARGET ?= x86_64-unknown-linux-musl
+INSTALL_PLAYWRIGHT_BROWSERS ?= 1
+PLAYWRIGHT_NPM_PKG ?= playwright@latest
 
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
@@ -48,6 +50,8 @@ image:
 		--build-arg MQ_VERSION="$(MQ_VERSION)" \
 		--build-arg TYPST_VERSION="$(TYPST_VERSION)" \
 		--build-arg TYPST_TARGET="$(TYPST_TARGET)" \
+		--build-arg INSTALL_PLAYWRIGHT_BROWSERS="$(INSTALL_PLAYWRIGHT_BROWSERS)" \
+		--build-arg PLAYWRIGHT_NPM_PKG="$(PLAYWRIGHT_NPM_PKG)" \
 		--build-arg NPM_REGISTRY="$(NPM_REGISTRY)" \
 		--build-arg CODEX_NPM_PKG="$(CODEX_NPM_PKG)" \
 		-t "$(IMAGE)" -f Containerfile .

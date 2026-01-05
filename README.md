@@ -46,6 +46,12 @@ You can also override bundled tool versions:
 make install MQ_VERSION=0.5.9 TYPST_VERSION=0.14.2 TYPST_TARGET=x86_64-unknown-linux-musl
 ```
 
+If you want a smaller build (skip Playwright’s bundled browser download), set:
+
+```bash
+make install INSTALL_PLAYWRIGHT_BROWSERS=0
+```
+
 ### 2) Install the wrapper
 
 ```bash
@@ -192,6 +198,7 @@ The image ships with a few common “skills dependencies” so you don’t need 
 - `pandoc`
 - `mq`
 - `typst`
+- `chromium` + `playwright` (JS/client-rendered pages)
 
 ### Reuse host CLIs (optional; for extra tools/versions)
 
