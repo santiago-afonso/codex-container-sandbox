@@ -14,6 +14,30 @@ It provides a `codex-container-sandbox` wrapper that runs the OpenAI Codex CLI i
 - The host contributes *only* the workspace + a curated set of configuration/tooling mounts.
 - Prefer portable, repeatable patterns (scripted in the wrapper + `make install`) over “manual one-off fixes”.
 
+## In-Workspace Agent Documentation
+
+This repo includes `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` (at repo root).
+
+Rules:
+- Keep it **current** whenever you change mount behavior, tool availability, or any “where to write artifacts” convention.
+- The file must remain readable from inside the container workspace mount (i.e., it must live in the repo root and be committed).
+- The file must instruct agents to write temporary artifacts under `{workspace}/tmp` (repository-local), not OS `/tmp`.
+
+## Keeping The Image Up To Date
+
+This image intentionally vendors multiple fast-moving tools. To keep it maintainable:
+
+- Prefer putting versions behind **ARG defaults** in `Containerfile` with corresponding `Makefile` variables, so updates are one-line changes.
+- For each pinned tool, decide update cadence:
+  - `uv` + default Python: update regularly (Python point releases, uv releases).
+  - `codex` npm package: keep `@latest` (already); regressions should be handled by overriding `CODEX_NPM_PKG`.
+  - `playwright`: keep `@latest` by default; be aware it downloads large browser artifacts.
+  - `typst`, `mq`, `bd`: update occasionally; pin versions to known-good releases but revisit when bugs/features require it.
+- When bumping versions:
+  - Rebuild the image via `make image` (or `make install`) on a corporate network (to catch TLS/proxy issues early).
+  - Run a minimal in-container smoke check: `python3 --version`, `uv --version`, `codex --version`, `playwright --version`, and any key CLIs (pdf/image/web).
+  - Update `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` if behavior/tooling changes.
+
 ## Portability Workflow (repeatable)
 
 When a new tool/skill is added on the host and you want it usable inside the container, follow this sequence:
@@ -59,3 +83,4 @@ When a new tool/skill is added on the host and you want it usable inside the con
 - 2026-01-05: Portability pattern: mount host auth/prompts/skills RO; mount `~/.local/bin`, `uv` tool dirs, and Homebrew prefix RO when needed.
 - 2026-01-05: Enterprise TLS MITM requires explicit CA injection during image build; avoid insecure npm/curl flags.
 - 2026-01-05: WSL portability: default Podman runtime to `runc` (override via env) when `crun` is flaky.
+- 2026-01-05: Keep `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` updated; agents write artifacts under `{workspace}/tmp`.
