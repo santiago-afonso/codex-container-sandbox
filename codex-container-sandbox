@@ -219,6 +219,21 @@ if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:-0}" -ne 1 ]]; then
                 exit 0
               }
             )
+
+            # Ensure there is an initial sync commit (and JSONL export) immediately
+            # after initialization. This keeps the "beads state" visible in git
+            # right away, without needing a follow-up manual sync.
+            #
+            # This is intentionally local-only: no pull/push here, to avoid
+            # unexpected network activity beyond the migrate step.
+            echo "[codex-container-sandbox] Beads: initial sync (local-only) to populate JSONL on sync branch" >&2
+            (
+              cd "$WORKSPACE_ROOT_HOST"
+              BEADS_DIR="$BEADS_DIR_HOST" bd sync --no-pull --no-push || {
+                echo "[codex-container-sandbox] WARN: Beads initial sync failed; continuing." >&2
+                exit 0
+              }
+            )
           else
             echo "[codex-container-sandbox] WARN: Beads: no git remote 'origin'; skipping sync-branch migration." >&2
           fi
