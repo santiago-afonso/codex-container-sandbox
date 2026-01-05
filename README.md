@@ -12,7 +12,7 @@ Networking is enabled (full egress).
 
 ### 1) Build an image
 
-You need an image that includes `codex`, `git`, `bash`, `python3`, and `uv`.
+You need an image that includes `codex`, `git`, `bash`, and `uv` (plus a Python runtime; this image uses **uv-managed Python** by default, and exposes it as `python3` in the container).
 Use `Containerfile`:
 
 ```bash
@@ -44,6 +44,18 @@ You can also override bundled tool versions:
 
 ```bash
 make install MQ_VERSION=0.5.9 TYPST_VERSION=0.14.2 TYPST_TARGET=x86_64-unknown-linux-musl
+```
+
+Override the default uv-managed Python version:
+
+```bash
+make install UV_DEFAULT_PYTHON=3.14
+```
+
+You can also override the bundled uv binary version (rarely needed):
+
+```bash
+make install UV_VERSION=0.9.21
 ```
 
 If you want a smaller build (skip Playwright’s bundled browser download), set:

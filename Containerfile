@@ -43,9 +43,15 @@ RUN strip /opt/mq/bin/mq >/dev/null 2>&1 || true
 # ----------------------------
 FROM docker.io/library/node:20-bookworm-slim
 
+# Provide a predictable HOME early (and make it writable for arbitrary UIDs).
+# We intentionally install uv-managed Python and uv tools under this HOME so
+# the wrapper (which sets HOME=/home/codex) can reuse them across host UIDs.
+ENV HOME=/home/codex
+ENV PATH="/home/codex/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+RUN mkdir -p "$HOME" && chmod 0777 "$HOME"
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash ca-certificates curl git less openssh-client openssl \
-    python3 python3-pip python3-venv \
     ripgrep \
     # Self-sufficient “skills/tooling” layer:
     # - image-crop: ImageMagick (convert/identify)
@@ -80,6 +86,27 @@ RUN if [ -n "${EXTRA_CA_CERT_B64}" ]; then \
 # Bring in mq from the builder stage.
 COPY --from=mq_builder /opt/mq/bin/mq /usr/local/bin/mq
 
+# Install uv as a standalone binary (not via system Python/pip), then install a
+# uv-managed Python and set it as the default.
+ARG UV_VERSION="0.9.21"
+ARG UV_TARGET="x86_64-unknown-linux-gnu"
+ARG UV_DEFAULT_PYTHON="3.14"
+ENV UV_NATIVE_TLS=1
+ENV UV_MANAGED_PYTHON=1
+ENV UV_PYTHON="${UV_DEFAULT_PYTHON}"
+RUN curl -fsSL \
+      "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_TARGET}.tar.gz" \
+      -o /tmp/uv.tar.gz \
+  && tar -xzf /tmp/uv.tar.gz -C /tmp \
+  && install -m 0755 "/tmp/uv-${UV_TARGET}/uv" /usr/local/bin/uv \
+  && if [ -f "/tmp/uv-${UV_TARGET}/uvx" ]; then install -m 0755 "/tmp/uv-${UV_TARGET}/uvx" /usr/local/bin/uvx; fi \
+  && rm -rf /tmp/uv.tar.gz "/tmp/uv-${UV_TARGET}"
+RUN mkdir -p "$HOME/.local/bin" "$HOME/.local/share" && chmod -R 0777 "$HOME/.local"
+RUN uv python install --preview-features python-install-default --install-dir "$HOME/.local/share/uv/python" --default --force "${UV_DEFAULT_PYTHON}" \
+  && py="$(uv python find --no-project --managed-python "${UV_DEFAULT_PYTHON}")" \
+  && ln -sfn "$py" /usr/local/bin/python \
+  && ln -sfn "$py" /usr/local/bin/python3
+
 # Install Typst (prebuilt binary).
 # We default to musl for portability (no external libc deps).
 ARG TYPST_VERSION="0.14.2"
@@ -91,12 +118,10 @@ RUN curl -fsSL \
   && install -m 0755 "/tmp/typst-${TYPST_TARGET}/typst" /usr/local/bin/typst \
   && rm -rf "/tmp/typst-${TYPST_TARGET}" /tmp/typst.tar.xz
 
-# Install uv into a global location (so arbitrary --user UIDs can execute it).
-RUN python3 -m pip install --no-cache-dir --break-system-packages uv
-
 # read-webpage-content-as-markdown + read-pdf both rely on `markitdown`.
-# Installing it in the image avoids depending on host uv-tool mounts.
-RUN python3 -m pip install --no-cache-dir --break-system-packages "markitdown[pdf]"
+# Install it as a uv tool (so it's self-contained and uses uv-managed Python).
+RUN uv tool install --python "${UV_DEFAULT_PYTHON}" "markitdown[pdf]" \
+  && ln -sfn "$HOME/.local/bin/markitdown" /usr/local/bin/markitdown
 
 # Force Node to use the OS CA store (including any EXTRA_CA_CERT_B64 we installed).
 ENV NODE_OPTIONS="--use-openssl-ca"
@@ -126,7 +151,6 @@ RUN npm install -g "${PLAYWRIGHT_NPM_PKG}" \
        playwright install chromium; \
      fi
 
-# Provide a predictable HOME for the wrapper (and make it writable for arbitrary UIDs).
-ENV HOME=/home/codex
-RUN mkdir -p "$HOME" && chmod 0777 "$HOME"
+# Keep the shared HOME writable for arbitrary UIDs.
+RUN chmod 0777 "$HOME"
 WORKDIR /home/codex

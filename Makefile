@@ -12,6 +12,9 @@ EXTRA_CA_CERT_PATH ?=
 MQ_VERSION ?= 0.5.9
 TYPST_VERSION ?= 0.14.2
 TYPST_TARGET ?= x86_64-unknown-linux-musl
+UV_VERSION ?= 0.9.21
+UV_TARGET ?= x86_64-unknown-linux-gnu
+UV_DEFAULT_PYTHON ?= 3.14
 INSTALL_PLAYWRIGHT_BROWSERS ?= 1
 PLAYWRIGHT_NPM_PKG ?= playwright@latest
 
@@ -50,6 +53,9 @@ image:
 		--build-arg MQ_VERSION="$(MQ_VERSION)" \
 		--build-arg TYPST_VERSION="$(TYPST_VERSION)" \
 		--build-arg TYPST_TARGET="$(TYPST_TARGET)" \
+		--build-arg UV_VERSION="$(UV_VERSION)" \
+		--build-arg UV_TARGET="$(UV_TARGET)" \
+		--build-arg UV_DEFAULT_PYTHON="$(UV_DEFAULT_PYTHON)" \
 		--build-arg INSTALL_PLAYWRIGHT_BROWSERS="$(INSTALL_PLAYWRIGHT_BROWSERS)" \
 		--build-arg PLAYWRIGHT_NPM_PKG="$(PLAYWRIGHT_NPM_PKG)" \
 		--build-arg NPM_REGISTRY="$(NPM_REGISTRY)" \
