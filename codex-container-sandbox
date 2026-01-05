@@ -19,6 +19,7 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_SKILLS_DIR:=}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_PROMPTS_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_SKILLS_MOUNT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT:=0}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -193,6 +194,33 @@ if [[ -n "${SKILLS_HOST:-}" ]]; then
   if [[ ! -d "$SKILLS_HOST" ]] || [[ ! -r "$SKILLS_HOST" ]]; then
     echo "[codex-container-sandbox] skills dir not readable; skipping mount: $SKILLS_HOST" >&2
     SKILLS_HOST=""
+  fi
+fi
+
+# ----------------------------
+# Helper: add a mount only once (avoids duplicate -v flags)
+# ----------------------------
+add_ro_mount_unique() {
+  local p="${1:?missing path}"
+  local resolved_p
+  resolved_p="$(readlink -f "$p" 2>/dev/null || echo "$p")"
+  local existing resolved_existing
+  for existing in "${SANDBOX_RO_MOUNTS[@]}"; do
+    resolved_existing="$(readlink -f "$existing" 2>/dev/null || echo "$existing")"
+    if [[ "$resolved_existing" == "$resolved_p" ]]; then
+      return 0
+    fi
+  done
+  SANDBOX_RO_MOUNTS+=("$p")
+}
+
+# Host ~/.local/bin (optional). Useful for host-installed helper CLIs like read-pdf.
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT:-0}" -ne 1 ]]; then
+  if command -v read-pdf >/dev/null 2>&1; then
+    read_pdf_host="$(command -v read-pdf 2>/dev/null || true)"
+    if [[ "$read_pdf_host" == "$HOME/.local/bin/read-pdf" ]] && [[ -d "$HOME/.local/bin" ]]; then
+      add_ro_mount_unique "$HOME/.local/bin"
+    fi
   fi
 fi
 

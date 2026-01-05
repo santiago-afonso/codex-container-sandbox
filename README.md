@@ -155,6 +155,18 @@ Controls:
   - `CODEX_CONTAINER_SANDBOX_DISABLE_PROMPTS_MOUNT=1`
   - `CODEX_CONTAINER_SANDBOX_DISABLE_SKILLS_MOUNT=1`
 
+### Reuse host helper CLIs (read-pdf)
+
+If you have `read-pdf` installed on the host at `~/.local/bin/read-pdf`, the wrapper will
+mount `~/.local/bin` read-only into the container so `read-pdf` (and its companion scripts)
+are available on the container `$PATH`.
+
+Disable with:
+
+```bash
+CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT=1 codex-container-sandbox ...
+```
+
 ## Security note
 
 This wrapper is about **filesystem isolation** (mount boundaries), not egress safety.
