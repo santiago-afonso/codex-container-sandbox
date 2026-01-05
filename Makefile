@@ -6,6 +6,7 @@ PODMAN_RUNTIME ?= runc
 IMAGE ?= localhost/codex-container-sandbox:latest
 NPM_REGISTRY ?= https://registry.npmjs.org/
 CODEX_NPM_PKG ?= @openai/codex@latest
+EXTRA_CA_CERT_PATH ?=
 
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
@@ -23,7 +24,17 @@ help:
 
 image:
 	@command -v "$(PODMAN)" >/dev/null 2>&1 || { echo "$(PODMAN) not found on PATH" >&2; exit 1; }
+	@extra_ca_arg=""; \
+	if [ -n "$(EXTRA_CA_CERT_PATH)" ]; then \
+		if [ ! -r "$(EXTRA_CA_CERT_PATH)" ]; then \
+			echo "EXTRA_CA_CERT_PATH is set but not readable: $(EXTRA_CA_CERT_PATH)" >&2; \
+			exit 2; \
+		fi; \
+		extra_ca_b64="$$(base64 -w 0 "$(EXTRA_CA_CERT_PATH)" 2>/dev/null || base64 "$(EXTRA_CA_CERT_PATH)" | tr -d '\n')"; \
+		extra_ca_arg="--build-arg EXTRA_CA_CERT_B64=$$extra_ca_b64"; \
+	fi; \
 	"$(PODMAN)" build --runtime "$(PODMAN_RUNTIME)" \
+		$$extra_ca_arg \
 		--build-arg NPM_REGISTRY="$(NPM_REGISTRY)" \
 		--build-arg CODEX_NPM_PKG="$(CODEX_NPM_PKG)" \
 		-t "$(IMAGE)" -f Containerfile .

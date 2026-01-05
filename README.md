@@ -31,6 +31,12 @@ If you're on a corporate network with an npm mirror, override the registry:
 make install NPM_REGISTRY=https://your-registry.example.com/
 ```
 
+If TLS is intercepted (self-signed cert in chain), pass a corporate root CA cert:
+
+```bash
+make install EXTRA_CA_CERT_PATH=$HOME/wbg_root_ca_g2.cer
+```
+
 ### 2) Install the wrapper
 
 ```bash
