@@ -83,6 +83,16 @@ RUN if [ -n "${EXTRA_CA_CERT_B64}" ]; then \
       update-ca-certificates; \
     fi
 
+# Make the system CA bundle the default for common toolchains/libraries.
+# This is important in transparent TLS interception environments where the
+# corporate root is installed into the OS certificate store.
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV SSL_CERT_DIR=/etc/ssl/certs
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+ENV CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+ENV GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt
+
 # Bring in mq from the builder stage.
 COPY --from=mq_builder /opt/mq/bin/mq /usr/local/bin/mq
 

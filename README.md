@@ -40,6 +40,8 @@ make install EXTRA_CA_CERT_PATH=$HOME/wbg_root_ca_g2.cer
 If `~/wbg_root_ca_g2.cer` exists, the Makefile auto-detects it when
 `EXTRA_CA_CERT_PATH` is not set.
 
+This cert is **not** stored in the repo; it’s a local machine file and should not be committed.
+
 You can also override bundled tool versions:
 
 ```bash
