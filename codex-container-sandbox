@@ -12,6 +12,9 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_CONFIG_FILE:=${XDG_CONFIG_HOME:-$HOME/.config}/codex-container-sandbox/config.sh}"
 : "${CODEX_CONTAINER_SANDBOX_PODMAN:=podman}"
 : "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:=}"
+: "${CODEX_CONTAINER_SANDBOX_AUTH_FILE:=}"
+: "${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE:=rw}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_AUTH_MOUNT:=0}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -138,6 +141,26 @@ install -d -m 0700 "$CODEX_CONTAINER_SANDBOX_STATE_DIR"
 STATE_CONT="$CONTAINER_HOME/.codex"
 
 # ----------------------------
+# Optional: reuse host Codex auth.json
+# ----------------------------
+AUTH_HOST=""
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_AUTH_MOUNT:-0}" -ne 1 ]]; then
+  if [[ -n "${CODEX_CONTAINER_SANDBOX_AUTH_FILE:-}" ]]; then
+    AUTH_HOST="$CODEX_CONTAINER_SANDBOX_AUTH_FILE"
+  elif [[ -r "$HOME/.codex/auth.json" ]]; then
+    AUTH_HOST="$HOME/.codex/auth.json"
+  fi
+fi
+
+if [[ -n "${AUTH_HOST:-}" ]]; then
+  AUTH_HOST="$(readlink -f "$AUTH_HOST" 2>/dev/null || echo "$AUTH_HOST")"
+  if [[ ! -r "$AUTH_HOST" ]]; then
+    echo "[codex-container-sandbox] auth file not readable; skipping mount: $AUTH_HOST" >&2
+    AUTH_HOST=""
+  fi
+fi
+
+# ----------------------------
 # Helper: map a host path -> container path
 #  - if under $HOME, preserve relative path under container home
 #  - else, mount to the same absolute path
@@ -204,6 +227,18 @@ PODMAN_ARGS+=( -v "$WORKSPACE_ROOT_HOST:$WORKSPACE_ROOT_CONT:rw" )
 
 # Codex state dir RW
 PODMAN_ARGS+=( -v "$CODEX_CONTAINER_SANDBOX_STATE_DIR:$STATE_CONT:rw" )
+
+# Host auth.json (optional). Mount after CODEX_HOME dir so the file overlays.
+if [[ -n "${AUTH_HOST:-}" ]]; then
+  case "${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE:-rw}" in
+    ro|rw) ;;
+    *)
+      echo "[codex-container-sandbox] invalid CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE=${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE}; use ro or rw" >&2
+      exit 2
+      ;;
+  esac
+  PODMAN_ARGS+=( -v "$AUTH_HOST:$STATE_CONT/auth.json:${CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE}" )
+fi
 
 # Extra mounts from config/flags
 for p in "${SANDBOX_RO_MOUNTS[@]}"; do

@@ -129,6 +129,16 @@ codex-container-sandbox --shell
 codex login
 ```
 
+### Reuse host auth.json (optional)
+
+If you already have a working host login (for example `~/.codex/auth.json`), you can mount it
+into the container so `codex` doesn't prompt for login again:
+
+- Auto-detects and mounts `~/.codex/auth.json` if it exists.
+- Override the path with `CODEX_CONTAINER_SANDBOX_AUTH_FILE=/path/to/auth.json`.
+- Disable mounting entirely with `CODEX_CONTAINER_SANDBOX_DISABLE_AUTH_MOUNT=1`.
+- Control mount mode (default `rw`) with `CODEX_CONTAINER_SANDBOX_AUTH_MOUNT_MODE=ro|rw`.
+
 ## Security note
 
 This wrapper is about **filesystem isolation** (mount boundaries), not egress safety.
