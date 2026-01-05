@@ -106,7 +106,7 @@ OPTIONS
 NOTES
   - Always runs codex with --dangerously-bypass-approvals-and-sandbox and --sandbox danger-full-access.
   - Networking is enabled (no egress restrictions).
-  - Web search tool is enabled (features.web_search_request=true).
+  - Web search tool is enabled (via `codex --search`).
   - Ensures `{workspace}/tmp/fetched/{web,pdf,images,other}` exists and is ignored via `.git/info/exclude` when possible.
   - If the workspace is a git repo and has no `.beads/`, initializes Beads via `bd init --skip-hooks --skip-merge-driver` and migrates to a dedicated sync branch.
 EOF
@@ -488,6 +488,16 @@ if [[ -n "${HOMEBREW_HOST:-}" ]]; then
 fi
 PODMAN_ARGS+=( --env "PATH=$container_path" )
 
+# Ensure `bash -c ...` and `bash -lc ...` subprocesses see the same PATH.
+# Many agent tool runners invoke commands via non-interactive shells and some use
+# `bash -lc`, which resets PATH via /etc/profile; BASH_ENV lets us restore it.
+BASH_ENV_HOST="$CODEX_CONTAINER_SANDBOX_STATE_DIR/bash_env.sh"
+cat >"$BASH_ENV_HOST" <<EOF
+export PATH=$(printf '%q' "$container_path")
+EOF
+chmod 0600 "$BASH_ENV_HOST"
+PODMAN_ARGS+=( --env "BASH_ENV=$STATE_CONT/bash_env.sh" )
+
 # Put common tool caches inside the mounted state dir by default.
 PODMAN_ARGS+=( --env "XDG_CACHE_HOME=$STATE_CONT/cache" )
 
@@ -551,13 +561,13 @@ done
 # Assemble codex command
 # ----------------------------
 if [[ "$RUN_SHELL" -eq 1 ]]; then
-  CONTAINER_CMD=( bash -l )
+  CONTAINER_CMD=( bash )
 else
   CONTAINER_CMD=( codex )
   # Always enable web search tool availability for the agent. We do this via
   # feature enabling instead of relying on `--search`, because `--search` is a
   # top-level flag (and does not exist on `codex exec` itself).
-  CONTAINER_CMD+=( --enable web_search_request )
+  CONTAINER_CMD+=( --search )
   exec_idx=-1
   for i in "${!CODEX_ARGS[@]}"; do
     if [[ "${CODEX_ARGS[$i]}" == "exec" || "${CODEX_ARGS[$i]}" == "e" ]]; then
