@@ -10,7 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m pip install --no-cache-dir --break-system-packages uv
 
 # Install the Codex CLI.
-RUN npm install -g @openai/codex@latest
+# Allow overriding the npm registry (e.g., corporate mirror) and/or package spec.
+ARG NPM_REGISTRY="https://registry.npmjs.org/"
+ARG CODEX_NPM_PKG="@openai/codex@latest"
+RUN npm config set registry "${NPM_REGISTRY}" \
+  && npm install -g "${CODEX_NPM_PKG}"
 
 # Provide a predictable HOME for the wrapper (and make it writable for arbitrary UIDs).
 ENV HOME=/home/codex

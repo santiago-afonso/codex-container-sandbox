@@ -19,6 +19,18 @@ Use `Containerfile`:
 podman build -t localhost/codex-container-sandbox:latest -f Containerfile .
 ```
 
+Or use the Makefile (also installs the wrapper):
+
+```bash
+make install
+```
+
+If you're on a corporate network with an npm mirror, override the registry:
+
+```bash
+make install NPM_REGISTRY=https://your-registry.example.com/
+```
+
 ### 2) Install the wrapper
 
 ```bash
