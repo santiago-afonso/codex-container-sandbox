@@ -239,7 +239,6 @@ The image ships with a few common “skills dependencies” so you don’t need 
 If you install CLIs on the host via:
 
 - `uv tool install ...` (often creates symlinks under `~/.local/bin` pointing at `~/.local/share/uv/tools/...`)
-- Homebrew on Linux (e.g., `/home/linuxbrew/.linuxbrew/bin/...`)
 
 the wrapper can mount the needed host directories read-only so those tools work inside the container.
 
@@ -253,12 +252,6 @@ Disable:
 ```bash
 CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT=1 codex-container-sandbox ...
 CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT=1 codex-container-sandbox ...
-```
-
-Override Homebrew prefix:
-
-```bash
-CODEX_CONTAINER_SANDBOX_HOMEBREW_PREFIX=/some/other/prefix codex-container-sandbox ...
 ```
 
 ## Security note

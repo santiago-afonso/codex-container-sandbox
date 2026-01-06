@@ -90,3 +90,4 @@ When a new tool/skill is added on the host and you want it usable inside the con
 - 2026-01-05: WSL portability: default Podman runtime to `runc` (override via env) when `crun` is flaky.
 - 2026-01-05: Keep `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` updated; agents write artifacts under `{workspace}/tmp`.
 - 2026-01-05: Corporate CA auto-detect only on host `PCACL-G7MKN94`; home builds must not inject WBG CA by default.
+- 2026-01-06: Portability change: no Homebrew mount; install `jq`+`yq` in-image; mount only specific `~/.local/bin/<tool>` files (not the whole dir).
