@@ -195,6 +195,10 @@ RUN npm config set registry "${NPM_REGISTRY}" \
   && npm config set cafile /etc/ssl/certs/ca-certificates.crt \
   && npm install -g "${CODEX_NPM_PKG}"
 
+# Install GitHub Copilot CLI (prerelease).
+ARG COPILOT_NPM_PKG="@github/copilot@prerelease"
+RUN npm install -g "${COPILOT_NPM_PKG}"
+
 # Playwright + headless Chromium (for JS/client-rendered pages).
 #
 # Notes:
