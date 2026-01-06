@@ -14,6 +14,30 @@ It provides a `codex-container-sandbox` wrapper that runs the OpenAI Codex CLI i
 - The host contributes *only* the workspace + a curated set of configuration/tooling mounts.
 - Prefer portable, repeatable patterns (scripted in the wrapper + `make install`) over “manual one-off fixes”.
 
+## Setup / Bootstrap (host-side)
+
+Prefer the scripted workflow over one-off Podman commands; the goal is “safe to re-run”:
+
+1) **Build + install**
+   - `cd ~/dotfiles/codex-container-sandbox && make install`
+     - Builds/updates the image (`localhost/codex-container-sandbox:latest`)
+     - Installs/updates the wrapper at `~/.local/bin/codex-container-sandbox`
+
+2) **(Optional) Configure mounts**
+   - Create/edit `~/.config/codex-container-sandbox/config.sh` to add extra RO/RW mounts.
+   - Keep mounts minimal; prefer RO, and only RW for known-safe cache dirs.
+
+3) **Login once (in-container)**
+   - `codex-container-sandbox --shell`
+   - `codex login`
+
+4) **Run the self-test**
+   - `cd ~/dotfiles/codex-container-sandbox && ./selftest.sh`
+
+Notes:
+- Use `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` for “inside the container” conventions (artifacts under `{workspace}/tmp`, etc.).
+- Repo-root `AGENTS.md` is intentionally mounted read-only inside the container to avoid in-container drift of durable heuristics.
+
 ## In-Workspace Agent Documentation
 
 This repo includes `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` (at repo root).
