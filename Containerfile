@@ -41,7 +41,7 @@ RUN strip /opt/mq/bin/mq >/dev/null 2>&1 || true
 # ----------------------------
 # Runtime
 # ----------------------------
-FROM docker.io/library/node:20-bookworm-slim
+FROM docker.io/library/node:22-bookworm-slim
 
 # Provide a predictable HOME early (and make it writable for arbitrary UIDs).
 # We intentionally install uv-managed Python and uv tools under this HOME so

@@ -12,10 +12,10 @@ EXTRA_CA_CERT_PATH ?=
 MQ_VERSION ?= 0.5.9
 TYPST_VERSION ?= 0.14.2
 TYPST_TARGET ?= x86_64-unknown-linux-musl
-UV_VERSION ?= 0.9.21
+UV_VERSION ?= 0.9.22
 UV_TARGET ?= x86_64-unknown-linux-gnu
 UV_DEFAULT_PYTHON ?= 3.14
-YQ_VERSION ?= 4.44.6
+YQ_VERSION ?= 4.50.1
 INSTALL_PLAYWRIGHT_BROWSERS ?= 1
 PLAYWRIGHT_NPM_PKG ?= playwright@latest
 
@@ -33,8 +33,8 @@ help:
 	@echo "  pii-scan       Scan repo for common secret/PII patterns"
 	@echo "  validate-docs  Validate README paths for standalone repo use"
 
-image:
-	@podman_bin="$(PODMAN)"; \
+	image:
+		@podman_bin="$(PODMAN)"; \
 	brew_bin="/home/linuxbrew/.linuxbrew/bin"; \
 	if [ -d "$$brew_bin" ]; then \
 		case ":$$PATH:" in *":$$brew_bin:"*) ;; *) export PATH="$$brew_bin:$$PATH";; esac; \
@@ -46,14 +46,14 @@ image:
 	elif [ -x "/home/linuxbrew/.linuxbrew/bin/podman" ]; then \
 		podman_bin="/home/linuxbrew/.linuxbrew/bin/podman"; \
 	fi; \
-	if [ ! -x "$$podman_bin" ]; then \
-		echo "$(PODMAN) not found on PATH (and no Homebrew fallback at /home/linuxbrew/.linuxbrew/bin/podman)" >&2; \
-		exit 1; \
-	fi; \
-	@extra_ca_arg=""; \
-	extra_ca_path="$(EXTRA_CA_CERT_PATH)"; \
-	runtime_arg=""; \
-	if [ -n "$(PODMAN_RUNTIME)" ]; then runtime_arg="--runtime $(PODMAN_RUNTIME)"; fi; \
+		if [ ! -x "$$podman_bin" ]; then \
+			echo "$(PODMAN) not found on PATH (and no Homebrew fallback at /home/linuxbrew/.linuxbrew/bin/podman)" >&2; \
+			exit 1; \
+		fi; \
+		extra_ca_arg=""; \
+		extra_ca_path="$(EXTRA_CA_CERT_PATH)"; \
+		runtime_arg=""; \
+		if [ -n "$(PODMAN_RUNTIME)" ]; then runtime_arg="--runtime $(PODMAN_RUNTIME)"; fi; \
 	# Only auto-detect the WBG root cert on the IT-managed WBG laptop. \
 	# On other machines (e.g., home), do not attempt corporate CA injection unless explicitly configured. \
 	if [ -z "$$extra_ca_path" ] && [ "$$(hostname 2>/dev/null || true)" = "PCACL-G7MKN94" ] && [ -r "$$HOME/wbg_root_ca_g2.cer" ]; then \
@@ -68,8 +68,8 @@ image:
 		extra_ca_b64="$$(base64 -w 0 "$$extra_ca_path" 2>/dev/null || base64 "$$extra_ca_path" | tr -d '\n')"; \
 		extra_ca_arg="--build-arg EXTRA_CA_CERT_B64=$$extra_ca_b64"; \
 	fi; \
-	# Enable Python/OpenSSL strict-mode workaround only when we are injecting a corporate CA. \
-	tls_workaround_arg="--build-arg ENABLE_CORP_TLS_WORKAROUNDS=0"; \
+		# Enable Python/OpenSSL strict-mode workaround only when we are injecting a corporate CA. \
+		tls_workaround_arg="--build-arg ENABLE_CORP_TLS_WORKAROUNDS=0"; \
 		if [ -n "$$extra_ca_path" ]; then \
 			tls_workaround_arg="--build-arg ENABLE_CORP_TLS_WORKAROUNDS=1"; \
 		fi; \
@@ -78,16 +78,16 @@ image:
 			$$tls_workaround_arg \
 			--build-arg MQ_VERSION="$(MQ_VERSION)" \
 			--build-arg TYPST_VERSION="$(TYPST_VERSION)" \
-		--build-arg TYPST_TARGET="$(TYPST_TARGET)" \
-		--build-arg UV_VERSION="$(UV_VERSION)" \
-		--build-arg UV_TARGET="$(UV_TARGET)" \
-		--build-arg UV_DEFAULT_PYTHON="$(UV_DEFAULT_PYTHON)" \
-		--build-arg YQ_VERSION="$(YQ_VERSION)" \
-		--build-arg INSTALL_PLAYWRIGHT_BROWSERS="$(INSTALL_PLAYWRIGHT_BROWSERS)" \
-		--build-arg PLAYWRIGHT_NPM_PKG="$(PLAYWRIGHT_NPM_PKG)" \
-		--build-arg NPM_REGISTRY="$(NPM_REGISTRY)" \
-		--build-arg CODEX_NPM_PKG="$(CODEX_NPM_PKG)" \
-		-t "$(IMAGE)" -f Containerfile .
+			--build-arg TYPST_TARGET="$(TYPST_TARGET)" \
+			--build-arg UV_VERSION="$(UV_VERSION)" \
+			--build-arg UV_TARGET="$(UV_TARGET)" \
+			--build-arg UV_DEFAULT_PYTHON="$(UV_DEFAULT_PYTHON)" \
+			--build-arg YQ_VERSION="$(YQ_VERSION)" \
+			--build-arg INSTALL_PLAYWRIGHT_BROWSERS="$(INSTALL_PLAYWRIGHT_BROWSERS)" \
+			--build-arg PLAYWRIGHT_NPM_PKG="$(PLAYWRIGHT_NPM_PKG)" \
+			--build-arg NPM_REGISTRY="$(NPM_REGISTRY)" \
+			--build-arg CODEX_NPM_PKG="$(CODEX_NPM_PKG)" \
+			-t "$(IMAGE)" -f Containerfile .
 
 install: image install-wrapper
 
