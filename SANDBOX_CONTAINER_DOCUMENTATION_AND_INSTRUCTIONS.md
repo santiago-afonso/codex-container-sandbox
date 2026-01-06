@@ -101,6 +101,8 @@ On some setups (notably WSL2 + rootless Podman), short-lived non-interactive run
 
 The `codex-container-sandbox` wrapper pins DNS servers by default to improve reliability. If you need to inherit host DNS behavior (or use different resolvers), configure it via `~/.config/codex-container-sandbox/config.sh` (see `README.md`).
 
+Implementation detail: when DNS override is enabled, the wrapper bind-mounts a generated `/etc/resolv.conf` into the container to bypass Podman DNS forwarders.
+
 ## Safety / scope reminders
 
 - Treat the workspace as sensitive (it may include credentials and private content).

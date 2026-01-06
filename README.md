@@ -87,6 +87,10 @@ CODEX_CONTAINER_SANDBOX_IMAGE="localhost/codex-container-sandbox:latest"
 # CODEX_CONTAINER_SANDBOX_DISABLE_DNS_OVERRIDE=1
 # Or override the server list (in order):
 # CODEX_CONTAINER_SANDBOX_DNS_SERVERS=(45.90.28.212 45.90.30.212 1.1.1.1 8.8.8.8)
+#
+# Note: When DNS override is enabled, the wrapper bind-mounts a generated
+# /etc/resolv.conf into the container to bypass Podman DNS forwarders (often a
+# 169.254.x.x hop).
 
 # Mount helper tools read-only (mapped under /home/codex/...)
 CODEX_CONTAINER_SANDBOX_RO_MOUNTS=(
