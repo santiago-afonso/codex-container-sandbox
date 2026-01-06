@@ -213,8 +213,8 @@ Controls:
 ### Reuse host helper CLIs (read-pdf)
 
 If you have `read-pdf` installed on the host at `~/.local/bin/read-pdf`, the wrapper will
-mount `~/.local/bin` read-only into the container so `read-pdf` (and its companion scripts)
-are available on the container `$PATH`.
+mount that executable read-only into the container (without mounting the entire `~/.local/bin`
+directory) so it is available on the container `$PATH`.
 
 Disable with:
 
@@ -233,7 +233,6 @@ The image ships with a few common “skills dependencies” so you don’t need 
 - `mq`
 - `typst`
 - `chromium` + `playwright` (JS/client-rendered pages)
-- `bd` (Beads issue tracker)
 
 ### Reuse host CLIs (optional; for extra tools/versions)
 
@@ -248,14 +247,12 @@ Defaults (best-effort, only when detected):
 
 - Mount `~/.local/share/uv/tools` read-only when `ttok` is detected as a uv tool install.
 - Also mount `~/.local/share/uv/python` read-only (needed for uv tool shebang interpreters) when present.
-- Mount `/home/linuxbrew/.linuxbrew` read-only when one of `yq` or `jq` is detected under that prefix, and add its `bin/` to `$PATH`.
 
 Disable:
 
 ```bash
 CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT=1 codex-container-sandbox ...
 CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT=1 codex-container-sandbox ...
-CODEX_CONTAINER_SANDBOX_DISABLE_HOMEBREW_MOUNT=1 codex-container-sandbox ...
 ```
 
 Override Homebrew prefix:

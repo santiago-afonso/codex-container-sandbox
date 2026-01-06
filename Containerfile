@@ -53,6 +53,7 @@ RUN mkdir -p "$HOME" && chmod 0777 "$HOME"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash ca-certificates curl git less openssh-client openssl \
     ripgrep \
+    jq \
     # Self-sufficient “skills/tooling” layer:
     # - image-crop: ImageMagick (convert/identify)
     # - read-pdf: Poppler tools (pdfinfo/pdftoppm) + ImageMagick is handy for follow-on crops
@@ -171,15 +172,12 @@ RUN curl -fsSL \
   && install -m 0755 "/tmp/typst-${TYPST_TARGET}/typst" /usr/local/bin/typst \
   && rm -rf "/tmp/typst-${TYPST_TARGET}" /tmp/typst.tar.xz
 
-# Install Beads (bd) CLI (prebuilt binary).
-ARG BEADS_VERSION="0.44.0"
-ARG BEADS_PLATFORM="linux_amd64"
+# Install yq (mikefarah) (prebuilt binary).
+ARG YQ_VERSION="4.44.6"
 RUN curl -fsSL \
-      "https://github.com/steveyegge/beads/releases/download/v${BEADS_VERSION}/beads_${BEADS_VERSION}_${BEADS_PLATFORM}.tar.gz" \
-      -o /tmp/beads.tar.gz \
-  && tar -xzf /tmp/beads.tar.gz -C /tmp \
-  && install -m 0755 /tmp/bd /usr/local/bin/bd \
-  && rm -rf /tmp/beads.tar.gz /tmp/bd /tmp/CHANGELOG.md /tmp/LICENSE /tmp/README.md
+      "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
+      -o /usr/local/bin/yq \
+  && chmod 0755 /usr/local/bin/yq
 
 # read-webpage-content-as-markdown + read-pdf both rely on `markitdown`.
 # Install it as a uv tool (so it's self-contained and uses uv-managed Python).

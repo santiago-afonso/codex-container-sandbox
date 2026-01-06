@@ -32,7 +32,7 @@ This image intentionally vendors multiple fast-moving tools. To keep it maintain
   - `uv` + default Python: update regularly (Python point releases, uv releases).
   - `codex` npm package: keep `@latest` (already); regressions should be handled by overriding `CODEX_NPM_PKG`.
   - `playwright`: keep `@latest` by default; be aware it downloads large browser artifacts.
-  - `typst`, `mq`, `bd`: update occasionally; pin versions to known-good releases but revisit when bugs/features require it.
+  - `typst`, `mq`: update occasionally; pin versions to known-good releases but revisit when bugs/features require it.
 - When bumping versions:
   - Rebuild the image via `make image` (or `make install`) on a corporate network (to catch TLS/proxy issues early).
   - Run a minimal in-container smoke check: `python3 --version`, `uv --version`, `codex --version`, `playwright --version`, and any key CLIs (pdf/image/web).
@@ -62,12 +62,11 @@ When a new tool/skill is added on the host and you want it usable inside the con
    - Provide env toggles to disable any mount (so “clean room” runs are easy).
 
 3) **Make host CLIs resolve inside the container**
-   - If the host CLI lives in `~/.local/bin`, mount `~/.local/bin` read-only and ensure it is on PATH in-container.
+   - If the host CLI lives in `~/.local/bin`, prefer mounting only the specific executable(s) you need (read-only) rather than mounting the entire directory.
    - If the host CLI is a symlink created by `uv tool` (common), it may depend on:
      - `~/.local/share/uv/tools`
      - `~/.local/share/uv/python`
      Mount those directories read-only into the container at the **same absolute paths** so symlinks/shebangs resolve.
-   - If the host CLI is installed via Homebrew, mount the Homebrew prefix read-only (default `/home/linuxbrew/.linuxbrew`) so ELF deps and RPATHs keep working.
 
 4) **Handle enterprise TLS / proxy environments**
    - If network is transparently MITM’d, language tooling (notably Node/npm) may not trust the system CA by default.

@@ -22,13 +22,9 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT:=0}"
-: "${CODEX_CONTAINER_SANDBOX_DISABLE_HOMEBREW_MOUNT:=0}"
-: "${CODEX_CONTAINER_SANDBOX_HOMEBREW_PREFIX:=/home/linuxbrew/.linuxbrew}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_GIT_IDENTITY_SYNC:=0}"
 : "${CODEX_CONTAINER_SANDBOX_GIT_NAME:=}"
 : "${CODEX_CONTAINER_SANDBOX_GIT_EMAIL:=}"
-: "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:=0}"
-: "${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH:=beads-sync}"
 : "${CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT:=}"
 : "${CODEX_CONTAINER_SANDBOX_PREFLIGHT_SCRIPT_REL:=tmp/codex-container-sandbox/preflight.sh}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION:=0}"
@@ -112,7 +108,6 @@ NOTES
   - Networking is enabled (no egress restrictions).
   - Web search tool is enabled (via `codex --search`).
   - Ensures `{workspace}/tmp/...` artifact folders exist (including `tmp/fetched/...`) and are ignored via `.git/info/exclude` when possible.
-  - If the workspace is a git repo and has no `.beads/`, initializes Beads via `bd init --skip-hooks --skip-merge-driver` and migrates to a dedicated sync branch.
 EOF
 }
 
@@ -333,7 +328,7 @@ check_tools() {
 }
 
 echo "[preflight] --- tool resolution (current shell) ---"
-check_tools codex bd python3 uv rg curl pandoc mq typst playwright chromium read-pdf markitdown ttok jq yq || true
+check_tools codex python3 uv rg curl pandoc mq typst playwright chromium read-pdf markitdown ttok jq yq || true
 
 echo "[preflight] --- tool resolution (login shell: bash -lc) ---"
 if command -v bash >/dev/null 2>&1; then
@@ -369,75 +364,6 @@ if git -C "$WORKSPACE_ROOT_HOST" rev-parse --git-dir >/dev/null 2>&1; then
         echo "# codex-container-sandbox: ignore workspace tmp artifacts"
         echo "tmp/"
       } >>"$exclude_file"
-    fi
-  fi
-fi
-
-# ----------------------------
-# Ensure Beads is initialized (host-side)
-#
-# This intentionally follows the repo's bd-workflow guidance:
-# - Never run plain `bd init` for agent sessions.
-# - Use `bd init --skip-hooks --skip-merge-driver`.
-# - Migrate to a dedicated sync branch so code branches remain clean.
-# ----------------------------
-if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:-0}" -ne 1 ]]; then
-  if git -C "$WORKSPACE_ROOT_HOST" rev-parse --git-dir >/dev/null 2>&1; then
-    if [[ ! -d "$WORKSPACE_ROOT_HOST/.beads" ]]; then
-      if command -v bd >/dev/null 2>&1; then
-        echo "[codex-container-sandbox] Beads: .beads/ not found; initializing in repo root: $WORKSPACE_ROOT_HOST" >&2
-        BEADS_DIR_HOST="$WORKSPACE_ROOT_HOST/.beads"
-        (
-          cd "$WORKSPACE_ROOT_HOST"
-          # Force Beads to use this repo's .beads directory even if we are inside
-          # a nested git repo (e.g., a git submodule under a parent repo with its
-          # own .beads/).
-          #
-          # Default to SQLite-backed storage unless the repo is already known to
-          # be JSONL-only (which would require an existing .beads/config.yaml).
-          BEADS_DIR="$BEADS_DIR_HOST" bd --db "$BEADS_DIR_HOST/beads.db" init --skip-hooks --skip-merge-driver
-        )
-
-        # Configure dedicated sync branch/worktree (keeps normal branches clean).
-        #
-        # Important behavior note:
-        # - `bd migrate sync` currently attempts a `git push` as part of setup, which
-        #   is too surprising for an auto-init path.
-        # - Instead, we set `sync.branch` in `.beads/config.yaml` and rely on
-        #   `bd sync --no-pull --no-push` to create the local worktree/branch.
-        if [[ -n "${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH:-}" ]]; then
-          echo "[codex-container-sandbox] Beads: configuring sync.branch=${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH} (local-only)" >&2
-          (
-            cd "$WORKSPACE_ROOT_HOST"
-            BEADS_DIR="$BEADS_DIR_HOST" bd config set sync.branch "$CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH" || {
-              echo "[codex-container-sandbox] WARN: Beads: failed to set sync.branch; leaving default behavior." >&2
-              exit 0
-            }
-          )
-
-          # Ensure there is an initial sync commit (and JSONL export) immediately
-          # after initialization so the JSONL exists right away on the sync branch.
-          #
-          # Intentionally local-only: no pull/push here.
-          #
-          # If the repo has no commits yet, bd currently falls back to committing
-          # on the current branch; skip to avoid surprising a brand new repo.
-          if git -C "$WORKSPACE_ROOT_HOST" rev-parse --verify HEAD >/dev/null 2>&1; then
-            echo "[codex-container-sandbox] Beads: initial sync (local-only) to populate JSONL on sync branch" >&2
-            (
-              cd "$WORKSPACE_ROOT_HOST"
-              BEADS_DIR="$BEADS_DIR_HOST" bd sync --no-pull --no-push || {
-                echo "[codex-container-sandbox] WARN: Beads initial sync failed; continuing." >&2
-                exit 0
-              }
-            )
-          else
-            echo "[codex-container-sandbox] WARN: Beads: repo has no commits yet; skipping initial sync (run later after first commit)." >&2
-          fi
-        fi
-      else
-        echo "[codex-container-sandbox] WARN: Beads: `bd` not found on host; cannot auto-init .beads/." >&2
-      fi
     fi
   fi
 fi
@@ -567,14 +493,16 @@ add_ro_mount_unique() {
 }
 
 # Host ~/.local/bin (optional). Useful for host-installed helper CLIs like read-pdf.
+#
+# IMPORTANT: Prefer mounting specific executables rather than the entire
+# ~/.local/bin directory to avoid unintentionally exposing unrelated host tools.
 if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT:-0}" -ne 1 ]]; then
   if [[ -d "$HOME/.local/bin" ]]; then
     for tool in read-pdf ttok; do
       if command -v "$tool" >/dev/null 2>&1; then
         tool_path="$(command -v "$tool" 2>/dev/null || true)"
         if [[ "$tool_path" == "$HOME/.local/bin/$tool" ]]; then
-          add_ro_mount_unique "$HOME/.local/bin"
-          break
+          add_ro_mount_unique "$HOME/.local/bin/$tool"
         fi
       fi
     done
@@ -599,25 +527,6 @@ if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT:-0}" -ne 1 ]]; then
           if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT:-0}" -ne 1 ]] && [[ -d "$HOME/.local/share/uv/python" ]]; then
             UV_PYTHON_HOST="$HOME/.local/share/uv/python"
           fi
-          break
-        fi
-      fi
-    done
-  fi
-fi
-
-HOMEBREW_HOST=""
-if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_HOMEBREW_MOUNT:-0}" -ne 1 ]]; then
-  brew_prefix="${CODEX_CONTAINER_SANDBOX_HOMEBREW_PREFIX:-/home/linuxbrew/.linuxbrew}"
-  if [[ -d "$brew_prefix" ]]; then
-    # The image ships with pandoc + mq. Only auto-mount Homebrew for tools we
-    # intentionally don't vendor into the image.
-    for tool in yq jq; do
-      if command -v "$tool" >/dev/null 2>&1; then
-        tool_path="$(command -v "$tool" 2>/dev/null || true)"
-        tool_target="$(readlink -f "$tool_path" 2>/dev/null || echo "$tool_path")"
-        if [[ "$tool_target" == "$brew_prefix/"* ]]; then
-          HOMEBREW_HOST="$brew_prefix"
           break
         fi
       fi
@@ -679,13 +588,6 @@ PODMAN_ARGS+=( --user "$(id -u):$(id -g)" )
 # Keep it predictable
 PODMAN_ARGS+=( --env "HOME=$CONTAINER_HOME" --env "USER=${USER:-codex}" )
 PODMAN_ARGS+=( --env "CODEX_HOME=$STATE_CONT" )
-
-# Ensure bd can locate the workspace Beads directory even when the agent runs
-# in a nested subdirectory (bd does not automatically walk up to repo root).
-if [[ -d "$WORKSPACE_ROOT_HOST/.beads" ]]; then
-  PODMAN_ARGS+=( --env "BEADS_DIR=$WORKSPACE_ROOT_CONT/.beads" )
-fi
-
 PODMAN_ARGS+=( --workdir "$WORKSPACE_CONT" )
 
 # Use a persistent git global config under CODEX_HOME.
@@ -700,11 +602,8 @@ if [[ -n "${GIT_EMAIL:-}" ]]; then
   PODMAN_ARGS+=( --env "GIT_AUTHOR_EMAIL=$GIT_EMAIL" --env "GIT_COMMITTER_EMAIL=$GIT_EMAIL" )
 fi
 
-# Minimal PATH with typical user bins first (+ optional Homebrew)
+# Minimal PATH with typical user bins first
 container_path="$CONTAINER_HOME/.local/bin:$CONTAINER_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-if [[ -n "${HOMEBREW_HOST:-}" ]]; then
-  container_path="$container_path:$HOMEBREW_HOST/bin"
-fi
 PODMAN_ARGS+=( --env "PATH=$container_path" )
 
 # Ensure `bash -c ...` and `bash -lc ...` subprocesses see the same PATH.
@@ -763,10 +662,6 @@ fi
 if [[ -n "${UV_PYTHON_HOST:-}" ]]; then
   PODMAN_ARGS+=( -v "$UV_PYTHON_HOST:$UV_PYTHON_HOST:ro" )
 fi
-if [[ -n "${HOMEBREW_HOST:-}" ]]; then
-  PODMAN_ARGS+=( -v "$HOMEBREW_HOST:$HOMEBREW_HOST:ro" )
-fi
-
 # Extra mounts from config/flags
 for p in "${SANDBOX_RO_MOUNTS[@]}"; do
   [[ -e "$p" ]] || { echo "[codex-container-sandbox] RO mount missing: $p" >&2; exit 2; }

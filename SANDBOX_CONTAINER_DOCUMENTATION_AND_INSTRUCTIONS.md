@@ -63,7 +63,6 @@ The container image aims to be largely self-sufficient for common skills:
 - Markdown AST query: `mq`
 - Typesetting: `typst`
 - Browser automation: `playwright`, `chromium` (headless)
-- Local issue tracking: `bd` (Beads)
 - Python is **uv-managed** and exposed as `python3` (default target: Python 3.14.x)
 
 ## Certificates / corporate TLS interception

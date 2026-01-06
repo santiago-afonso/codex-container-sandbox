@@ -15,8 +15,7 @@ TYPST_TARGET ?= x86_64-unknown-linux-musl
 UV_VERSION ?= 0.9.21
 UV_TARGET ?= x86_64-unknown-linux-gnu
 UV_DEFAULT_PYTHON ?= 3.14
-BEADS_VERSION ?= 0.44.0
-BEADS_PLATFORM ?= linux_amd64
+YQ_VERSION ?= 4.44.6
 INSTALL_PLAYWRIGHT_BROWSERS ?= 1
 PLAYWRIGHT_NPM_PKG ?= playwright@latest
 
@@ -66,8 +65,7 @@ image:
 		--build-arg UV_VERSION="$(UV_VERSION)" \
 		--build-arg UV_TARGET="$(UV_TARGET)" \
 		--build-arg UV_DEFAULT_PYTHON="$(UV_DEFAULT_PYTHON)" \
-		--build-arg BEADS_VERSION="$(BEADS_VERSION)" \
-		--build-arg BEADS_PLATFORM="$(BEADS_PLATFORM)" \
+		--build-arg YQ_VERSION="$(YQ_VERSION)" \
 		--build-arg INSTALL_PLAYWRIGHT_BROWSERS="$(INSTALL_PLAYWRIGHT_BROWSERS)" \
 		--build-arg PLAYWRIGHT_NPM_PKG="$(PLAYWRIGHT_NPM_PKG)" \
 		--build-arg NPM_REGISTRY="$(NPM_REGISTRY)" \
