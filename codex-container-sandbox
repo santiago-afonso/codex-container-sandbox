@@ -31,6 +31,7 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH:=beads-sync}"
 : "${CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT:=}"
 : "${CODEX_CONTAINER_SANDBOX_PREFLIGHT_SCRIPT_REL:=tmp/codex-container-sandbox/preflight.sh}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION:=0}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -106,7 +107,8 @@ OPTIONS
   -h, --help       Show this help
 
 NOTES
-  - Always runs codex with --dangerously-bypass-approvals-and-sandbox and --sandbox danger-full-access.
+  - By default, runs codex with --dangerously-bypass-approvals-and-sandbox and --sandbox danger-full-access.
+  - For debugging only, you can disable this injection by setting CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION=1.
   - Networking is enabled (no egress restrictions).
   - Web search tool is enabled (via `codex --search`).
   - Ensures `{workspace}/tmp/fetched/{web,pdf,images,other}` exists and is ignored via `.git/info/exclude` when possible.
@@ -772,42 +774,46 @@ else
       esac
     done
 
-    has_bypass=0
-    has_sandbox=0
-    for arg in "${after_exec[@]}"; do
-      if [[ "$arg" == "--dangerously-bypass-approvals-and-sandbox" || "$arg" == "--yolo" ]]; then
-        has_bypass=1
-      elif [[ "$arg" == "--sandbox" || "$arg" == "-s" ]]; then
-        has_sandbox=1
-      fi
-    done
-
     injected=()
-    if [[ "$has_bypass" -eq 0 ]]; then
-      injected+=( --dangerously-bypass-approvals-and-sandbox )
-    fi
-    if [[ "$has_sandbox" -eq 0 ]]; then
-      injected+=( --sandbox danger-full-access )
+    if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION:-0}" -ne 1 ]]; then
+      has_bypass=0
+      has_sandbox=0
+      for arg in "${after_exec[@]}"; do
+        if [[ "$arg" == "--dangerously-bypass-approvals-and-sandbox" || "$arg" == "--yolo" ]]; then
+          has_bypass=1
+        elif [[ "$arg" == "--sandbox" || "$arg" == "-s" ]]; then
+          has_sandbox=1
+        fi
+      done
+
+      if [[ "$has_bypass" -eq 0 ]]; then
+        injected+=( --dangerously-bypass-approvals-and-sandbox )
+      fi
+      if [[ "$has_sandbox" -eq 0 ]]; then
+        injected+=( --sandbox danger-full-access )
+      fi
     fi
 
     CONTAINER_CMD+=( "${before_exec_clean[@]}" "${injected[@]}" "${after_exec[@]}" )
   else
     # No exec subcommand found; inject at the top level.
-    has_bypass=0
-    has_sandbox=0
-    for arg in "${CODEX_ARGS[@]}"; do
-      if [[ "$arg" == "--dangerously-bypass-approvals-and-sandbox" || "$arg" == "--yolo" ]]; then
-        has_bypass=1
-      elif [[ "$arg" == "--sandbox" || "$arg" == "-s" ]]; then
-        has_sandbox=1
-      fi
-    done
+    if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION:-0}" -ne 1 ]]; then
+      has_bypass=0
+      has_sandbox=0
+      for arg in "${CODEX_ARGS[@]}"; do
+        if [[ "$arg" == "--dangerously-bypass-approvals-and-sandbox" || "$arg" == "--yolo" ]]; then
+          has_bypass=1
+        elif [[ "$arg" == "--sandbox" || "$arg" == "-s" ]]; then
+          has_sandbox=1
+        fi
+      done
 
-    if [[ "$has_bypass" -eq 0 ]]; then
-      CONTAINER_CMD+=( --dangerously-bypass-approvals-and-sandbox )
-    fi
-    if [[ "$has_sandbox" -eq 0 ]]; then
-      CONTAINER_CMD+=( --sandbox danger-full-access )
+      if [[ "$has_bypass" -eq 0 ]]; then
+        CONTAINER_CMD+=( --dangerously-bypass-approvals-and-sandbox )
+      fi
+      if [[ "$has_sandbox" -eq 0 ]]; then
+        CONTAINER_CMD+=( --sandbox danger-full-access )
+      fi
     fi
     CONTAINER_CMD+=( "${CODEX_ARGS[@]}" )
   fi
