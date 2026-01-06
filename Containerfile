@@ -212,6 +212,16 @@ RUN npm install -g "${PLAYWRIGHT_NPM_PKG}" \
        playwright install chromium; \
      fi
 
+# Install tk/ticket (minimal git-backed ticket tracker).
+# We pin to an expected SHA256 so upstream changes fail loudly and require an
+# intentional update here.
+ARG TICKET_URL="https://raw.githubusercontent.com/wedow/ticket/refs/heads/master/ticket"
+ARG TICKET_SHA256="5d596bbef7c35d5c5895a05c743a315313ab69d59e068f16442e033d10e757c1"
+RUN curl -fsSL "${TICKET_URL}" -o /usr/local/bin/ticket \
+  && if [ -n "${TICKET_SHA256}" ]; then echo "${TICKET_SHA256}  /usr/local/bin/ticket" | sha256sum -c -; fi \
+  && chmod 0755 /usr/local/bin/ticket \
+  && ln -sfn /usr/local/bin/ticket /usr/local/bin/tk
+
 # Keep the shared HOME writable for arbitrary UIDs.
 RUN chmod 0777 "$HOME"
 WORKDIR /home/codex
