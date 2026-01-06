@@ -34,7 +34,22 @@ help:
 	@echo "  validate-docs  Validate README paths for standalone repo use"
 
 image:
-	@command -v "$(PODMAN)" >/dev/null 2>&1 || { echo "$(PODMAN) not found on PATH" >&2; exit 1; }
+	@podman_bin="$(PODMAN)"; \
+	brew_bin="/home/linuxbrew/.linuxbrew/bin"; \
+	if [ -d "$$brew_bin" ]; then \
+		case ":$$PATH:" in *":$$brew_bin:"*) ;; *) export PATH="$$brew_bin:$$PATH";; esac; \
+	fi; \
+	if [ -x "$$podman_bin" ]; then \
+		:; \
+	elif command -v "$$podman_bin" >/dev/null 2>&1; then \
+		podman_bin="$$(command -v "$$podman_bin")"; \
+	elif [ -x "/home/linuxbrew/.linuxbrew/bin/podman" ]; then \
+		podman_bin="/home/linuxbrew/.linuxbrew/bin/podman"; \
+	fi; \
+	if [ ! -x "$$podman_bin" ]; then \
+		echo "$(PODMAN) not found on PATH (and no Homebrew fallback at /home/linuxbrew/.linuxbrew/bin/podman)" >&2; \
+		exit 1; \
+	fi; \
 	@extra_ca_arg=""; \
 	extra_ca_path="$(EXTRA_CA_CERT_PATH)"; \
 	runtime_arg=""; \
@@ -58,7 +73,7 @@ image:
 		if [ -n "$$extra_ca_path" ]; then \
 			tls_workaround_arg="--build-arg ENABLE_CORP_TLS_WORKAROUNDS=1"; \
 		fi; \
-		"$(PODMAN)" build $$runtime_arg \
+		"$$podman_bin" build $$runtime_arg \
 			$$extra_ca_arg \
 			$$tls_workaround_arg \
 			--build-arg MQ_VERSION="$(MQ_VERSION)" \

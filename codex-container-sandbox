@@ -68,6 +68,15 @@ if [[ "$CODEX_CONTAINER_SANDBOX_PODMAN" != */* ]]; then
   fi
 fi
 
+# If we're using Homebrew podman by absolute path, ensure Homebrew's bin is on
+# PATH so podman can locate helper binaries like `conmon`.
+if [[ "$CODEX_CONTAINER_SANDBOX_PODMAN" == "/home/linuxbrew/.linuxbrew/bin/podman" ]]; then
+  case ":${PATH:-}:" in
+    *":/home/linuxbrew/.linuxbrew/bin:"*) ;;
+    *) export PATH="/home/linuxbrew/.linuxbrew/bin:${PATH:-}" ;;
+  esac
+fi
+
 # Allow config to set these arrays using either bash arrays or whitespace-separated strings.
 if declare -p CODEX_CONTAINER_SANDBOX_RO_MOUNTS >/dev/null 2>&1; then
   # shellcheck disable=SC2154

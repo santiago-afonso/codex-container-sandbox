@@ -20,7 +20,28 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
-need_cmd podman
+PODMAN_BIN="${CODEX_CONTAINER_SANDBOX_PODMAN:-podman}"
+if [[ "$PODMAN_BIN" != */* ]] && ! command -v "$PODMAN_BIN" >/dev/null 2>&1; then
+  if [[ -x "/home/linuxbrew/.linuxbrew/bin/podman" ]]; then
+    PODMAN_BIN="/home/linuxbrew/.linuxbrew/bin/podman"
+  fi
+fi
+
+# If we resolved to Homebrew podman, make sure Homebrew bin is on PATH so podman
+# can find helper binaries like `conmon`.
+if [[ "$PODMAN_BIN" == "/home/linuxbrew/.linuxbrew/bin/podman" ]]; then
+  case ":${PATH:-}:" in
+    *":/home/linuxbrew/.linuxbrew/bin:"*) ;;
+    *) export PATH="/home/linuxbrew/.linuxbrew/bin:${PATH:-}" ;;
+  esac
+fi
+
+export CODEX_CONTAINER_SANDBOX_PODMAN="$PODMAN_BIN"
+if [[ "$PODMAN_BIN" == */* ]]; then
+  [[ -x "$PODMAN_BIN" ]] || die "missing required command: $PODMAN_BIN"
+else
+  need_cmd "$PODMAN_BIN"
+fi
 need_cmd mktemp
 
 [[ -x "$WRAPPER" ]] || die "wrapper not executable or missing: $WRAPPER"
@@ -35,12 +56,12 @@ trap cleanup EXIT
 echo "[selftest] Using image: $IMAGE"
 echo "[selftest] Using wrapper: $WRAPPER"
 
-if ! podman image exists "$IMAGE" >/dev/null 2>&1; then
+if ! "$PODMAN_BIN" image exists "$IMAGE" >/dev/null 2>&1; then
   cat >&2 <<EOF
 [selftest] Image not found: $IMAGE
 
 Build it with:
-  podman build -t "$IMAGE_DEFAULT" -f "$ROOT/Containerfile" "$ROOT"
+  "$PODMAN_BIN" build -t "$IMAGE_DEFAULT" -f "$ROOT/Containerfile" "$ROOT"
 
 Or override with:
   CODEX_CONTAINER_SANDBOX_IMAGE=... $0
