@@ -7,6 +7,7 @@ set -euo pipefail
 # Defaults (override via env or config)
 # ----------------------------
 : "${CODEX_CONTAINER_SANDBOX_IMAGE:=localhost/codex-container-sandbox:latest}"
+: "${CODEX_CONTAINER_SANDBOX_HOSTNAME:=codex-container-sandbox}"
 : "${CODEX_CONTAINER_SANDBOX_CONTAINER_HOME:=/home/codex}"
 : "${CODEX_CONTAINER_SANDBOX_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/codex-container-sandbox}"
 : "${CODEX_CONTAINER_SANDBOX_CONFIG_FILE:=${XDG_CONFIG_HOME:-$HOME/.config}/codex-container-sandbox/config.sh}"
@@ -649,6 +650,8 @@ if [[ -t 0 && -t 1 ]]; then
 else
   PODMAN_ARGS+=( -i )
 fi
+
+PODMAN_ARGS+=( --hostname "$CODEX_CONTAINER_SANDBOX_HOSTNAME" )
 
 if [[ "$CODEX_CONTAINER_SANDBOX_PERSIST" -eq 0 ]]; then
   PODMAN_ARGS+=( --rm )
