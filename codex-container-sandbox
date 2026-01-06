@@ -54,6 +54,20 @@ if [[ -f "$CODEX_CONTAINER_SANDBOX_CONFIG_FILE" ]]; then
   source "$CODEX_CONTAINER_SANDBOX_CONFIG_FILE"
 fi
 
+is_wsl() {
+  uname -r 2>/dev/null | grep -qiE 'microsoft|wsl'
+}
+
+# Resolve podman binary robustly (especially when Homebrew exists but shellenv
+# hasn't been loaded for this shell).
+if [[ "$CODEX_CONTAINER_SANDBOX_PODMAN" != */* ]]; then
+  if ! command -v "$CODEX_CONTAINER_SANDBOX_PODMAN" >/dev/null 2>&1; then
+    if [[ -x "/home/linuxbrew/.linuxbrew/bin/podman" ]]; then
+      CODEX_CONTAINER_SANDBOX_PODMAN="/home/linuxbrew/.linuxbrew/bin/podman"
+    fi
+  fi
+fi
+
 # Allow config to set these arrays using either bash arrays or whitespace-separated strings.
 if declare -p CODEX_CONTAINER_SANDBOX_RO_MOUNTS >/dev/null 2>&1; then
   # shellcheck disable=SC2154
@@ -557,10 +571,21 @@ PODMAN_ARGS=()
 
 # OCI runtime.
 # On some WSL environments, `crun` may fail with "unknown version specified";
-# default to `runc` there unless the user explicitly overrides.
+# prefer `runc` there when available, but fall back to `crun` if `runc` is missing.
 if [[ -z "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:-}" ]]; then
-  if uname -r 2>/dev/null | grep -qiE 'microsoft|wsl'; then
-    CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="runc"
+  if is_wsl; then
+    if command -v runc >/dev/null 2>&1; then
+      CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="runc"
+    elif command -v crun >/dev/null 2>&1; then
+      CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="crun"
+    fi
+  fi
+fi
+
+if [[ -n "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:-}" ]]; then
+  if ! command -v "$CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME" >/dev/null 2>&1; then
+    echo "[codex-container-sandbox] WARN: requested OCI runtime '$CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME' not found on PATH; letting podman choose default." >&2
+    CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME=""
   fi
 fi
 if [[ -n "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:-}" ]]; then
@@ -780,6 +805,25 @@ fi
 # ----------------------------
 # Run
 # ----------------------------
+if ! "$CODEX_CONTAINER_SANDBOX_PODMAN" image exists "$CODEX_CONTAINER_SANDBOX_IMAGE" >/dev/null 2>&1; then
+  if [[ "$CODEX_CONTAINER_SANDBOX_IMAGE" == localhost/* ]]; then
+    wrapper_path="$(readlink -f "${BASH_SOURCE[0]}")"
+    wrapper_dir="$(cd "$(dirname "$wrapper_path")" && pwd -P)"
+    repo_dir="$wrapper_dir"
+
+    echo "[codex-container-sandbox] ERROR: image not found locally: $CODEX_CONTAINER_SANDBOX_IMAGE" >&2
+    echo "[codex-container-sandbox] This looks like a local-only tag (localhost/*). Podman will try to pull it from a registry at localhost and fail unless you run one." >&2
+    echo >&2
+    if [[ -f "$repo_dir/Containerfile" ]]; then
+      echo "[codex-container-sandbox] Build it once with:" >&2
+      echo "[codex-container-sandbox]   cd \"$repo_dir\" && make image" >&2
+    else
+      echo "[codex-container-sandbox] Build it once with the repo's Containerfile (see README.md), or pass --image <remote-image>." >&2
+    fi
+    exit 2
+  fi
+fi
+
 FULL_CMD=( "$CODEX_CONTAINER_SANDBOX_PODMAN" run "${PODMAN_ARGS[@]}" "$CODEX_CONTAINER_SANDBOX_IMAGE" "${CONTAINER_CMD[@]}" )
 
 if [[ "$CODEX_CONTAINER_SANDBOX_DEBUG" -eq 1 || "$CODEX_CONTAINER_SANDBOX_PRINT_CODEX_CMD" -eq 1 ]]; then
