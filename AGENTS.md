@@ -38,6 +38,23 @@ Notes:
 - Use `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` for “inside the container” conventions (artifacts under `{workspace}/tmp`, etc.).
 - Repo-root `AGENTS.md` is intentionally mounted read-only inside the container to avoid in-container drift of durable heuristics.
 
+## DNS Defaults (reliability / bypass Podman forwarder)
+
+On WSL2 + rootless Podman, we observed intermittent DNS resolution failures in short-lived non-interactive runs (e.g. `curl: (6) Could not resolve host`).
+To reduce flakiness, the wrapper pins DNS by default and **bypasses Podman DNS forwarding**:
+
+- Default DNS server order:
+  - NextDNS: `45.90.28.212`, `45.90.30.212`
+  - Cloudflare: `1.1.1.1`
+  - Google: `8.8.8.8`
+- Implementation: when DNS override is enabled, the wrapper generates a `resolv.conf` in its state dir and bind-mounts it to `/etc/resolv.conf:ro` inside the container. This avoids the common `169.254.x.x` DNS hop (Podman/Netavark forwarder) and avoids inheriting WSL/Tailscale DNS.
+
+Configuration (in `~/.config/codex-container-sandbox/config.sh`):
+- Disable override (inherit host/Podman DNS): `CODEX_CONTAINER_SANDBOX_DISABLE_DNS_OVERRIDE=1`
+- Override the DNS list (in order): `CODEX_CONTAINER_SANDBOX_DNS_SERVERS=(...)`
+
+Risk/footgun: pinning public DNS may break access to corporate/internal hostnames; disable the override or provide an internal resolver if you need that.
+
 ## In-Workspace Agent Documentation
 
 This repo includes `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` (at repo root).
@@ -115,3 +132,4 @@ When a new tool/skill is added on the host and you want it usable inside the con
 - 2026-01-05: Keep `SANDBOX_CONTAINER_DOCUMENTATION_AND_INSTRUCTIONS.md` updated; agents write artifacts under `{workspace}/tmp`.
 - 2026-01-05: Corporate CA auto-detect only on host `PCACL-G7MKN94`; home builds must not inject WBG CA by default.
 - 2026-01-06: Portability change: no Homebrew mount; install `jq`+`yq` in-image; mount only specific `~/.local/bin/<tool>` files (not the whole dir).
+- 2026-01-06: DNS default: pin NextDNS→Cloudflare→Google and bind-mount /etc/resolv.conf to bypass Podman 169.254.x.x DNS forwarder (disable via CODEX_CONTAINER_SANDBOX_DISABLE_DNS_OVERRIDE=1).
