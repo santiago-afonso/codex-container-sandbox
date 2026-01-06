@@ -579,14 +579,14 @@ map_path() {
 PODMAN_ARGS=()
 
 # OCI runtime.
-# On some WSL environments, `crun` may fail with "unknown version specified";
-# prefer `runc` there when available, but fall back to `crun` if `runc` is missing.
+# Prefer the most modern runtime that is actually available. Historically, some
+# WSL setups had flaky `crun` behavior; those cases should set an explicit override.
 if [[ -z "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:-}" ]]; then
   if is_wsl; then
-    if command -v runc >/dev/null 2>&1; then
-      CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="runc"
-    elif command -v crun >/dev/null 2>&1; then
+    if command -v crun >/dev/null 2>&1; then
       CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="crun"
+    elif command -v runc >/dev/null 2>&1; then
+      CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="runc"
     fi
   fi
 fi
@@ -599,6 +599,16 @@ if [[ -n "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:-}" ]]; then
 fi
 if [[ -n "${CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME:-}" ]]; then
   PODMAN_ARGS+=( --runtime "$CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME" )
+fi
+
+# cgroups-v2 is the modern default. On WSL, you typically only get it once
+# systemd + unified cgroup hierarchy are enabled.
+if is_wsl; then
+  cgroup_fs_type="$(stat -fc %T /sys/fs/cgroup 2>/dev/null || true)"
+  if [[ "${cgroup_fs_type:-}" != "cgroup2fs" ]]; then
+    echo "[codex-container-sandbox] WARN: host appears to be using cgroups-v1/hybrid (type=${cgroup_fs_type:-unknown}); Podman v5+ prefers cgroups-v2." >&2
+    echo "[codex-container-sandbox] WARN: Enable systemd + cgroups-v2 in WSL for best compatibility (see os_scripts/windows/wsl_setup_ubuntu_2404.ps1 -EnableSystemd -EnableCgroupV2 -ShutdownAfter)." >&2
+  fi
 fi
 
 # tty / interactive only if stdout is a tty

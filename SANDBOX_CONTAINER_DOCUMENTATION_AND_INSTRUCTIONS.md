@@ -11,6 +11,23 @@ Key points:
 - Only a bounded set of host paths are mounted into the container (primarily the git workspace + optional RO helper mounts).
 - The container working directory is set to the same path as your host `$PWD`, but under the container’s workspace mount.
 
+## WSL / Podman prerequisites (host-side)
+
+If you are running on **WSL2**, modern Podman works best with:
+
+- **systemd enabled** in the distro
+- **cgroups-v2 (unified cgroup hierarchy) enabled**
+
+If you see warnings like “Using cgroups-v1 … deprecated”, or errors around missing runtimes, fix the host setup first.
+
+Recommended Windows-side command (PowerShell, from the `os_scripts` repo):
+
+- `windows\\wsl_setup_ubuntu_2404.ps1 -EnableSystemd -EnableCgroupV2 -ShutdownAfter`
+
+Then rebuild the image if needed:
+
+- `cd ~/dotfiles/codex-container-sandbox && make install`
+
 ## Where should I write artifacts?
 
 Write all temporary artifacts to:
