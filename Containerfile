@@ -220,7 +220,10 @@ ARG TICKET_SHA256="5d596bbef7c35d5c5895a05c743a315313ab69d59e068f16442e033d10e75
 RUN curl -fsSL "${TICKET_URL}" -o /usr/local/bin/ticket \
   && if [ -n "${TICKET_SHA256}" ]; then echo "${TICKET_SHA256}  /usr/local/bin/ticket" | sha256sum -c -; fi \
   && chmod 0755 /usr/local/bin/ticket \
-  && ln -sfn /usr/local/bin/ticket /usr/local/bin/tk
+  && ln -sfn /usr/local/bin/ticket /usr/local/bin/tk \
+  # Some tool runners sanitize PATH to /usr/bin:/bin. Ensure tk is still found.
+  && ln -sfn /usr/local/bin/ticket /usr/bin/ticket \
+  && ln -sfn /usr/local/bin/ticket /usr/bin/tk
 
 # Keep the shared HOME writable for arbitrary UIDs.
 RUN chmod 0777 "$HOME"
