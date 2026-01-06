@@ -23,17 +23,29 @@ Concretely:
 
 ### Default `tmp/` structure (use these folders)
 
-Create these subfolders as needed and place files in the most specific bucket:
+The wrapper pre-creates these folders on the host (if missing) and attempts to keep them out of `git status`
+by adding `tmp/` to `.git/info/exclude` (repo-local, uncommitted).
 
-- `{workspace}/tmp/fetched/web/` — raw fetched webpages and derived markdown/HTML snapshots
-- `{workspace}/tmp/fetched/pdf/` — downloaded PDFs (source-of-truth inputs)
-- `{workspace}/tmp/fetched/images/` — downloaded images (PNG/JPG/SVG, etc.)
+Use these folders and place files in the most specific bucket:
+
+- `{workspace}/tmp/codex-container-sandbox/` — wrapper + agent preflight outputs / logs (JSONL streams, debug, repro scripts)
+- `{workspace}/tmp/fetched/web/` — webpages and derived snapshots
+  - `{workspace}/tmp/fetched/web/raw/` — raw HTML fetches (source-of-truth inputs)
+  - `{workspace}/tmp/fetched/web/markdown/` — derived markdown, cleaned HTML, etc.
+- `{workspace}/tmp/fetched/pdf/` — PDFs and PDF-derived artifacts
+  - `{workspace}/tmp/fetched/pdf/raw/` — downloaded PDFs (source-of-truth inputs)
+  - `{workspace}/tmp/fetched/pdf/pages/` — rendered page images (e.g., via `pdftoppm`)
+  - `{workspace}/tmp/fetched/pdf/text/` — extracted text (e.g., via `pdftotext`)
+- `{workspace}/tmp/fetched/images/` — images and image-derived artifacts
+  - `{workspace}/tmp/fetched/images/raw/` — downloaded images (PNG/JPG/SVG, etc.)
+  - `{workspace}/tmp/fetched/images/derived/` — crops, conversions, OCR outputs, etc.
 - `{workspace}/tmp/fetched/other/` — any other fetched/binary inputs (ZIPs, data dumps, etc.)
+  - `{workspace}/tmp/fetched/other/raw/` — original downloads
+  - `{workspace}/tmp/fetched/other/derived/` — unpacked or processed outputs
 
 Notes:
 - Prefer deterministic, descriptive filenames (include domain/date/slug when practical).
 - Keep any “processed” artifacts next to the input folder when it’s clearly tied to a specific fetch (e.g. rendered PDF pages under `tmp/fetched/pdf/<doc-stem>/pages/`).
-- The `codex-container-sandbox` wrapper pre-creates these folders and attempts to ignore `tmp/` via `.git/info/exclude` (repo-local, uncommitted).
 
 This includes:
 - rendered PDF page images

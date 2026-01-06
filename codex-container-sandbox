@@ -111,7 +111,7 @@ NOTES
   - For debugging only, you can disable this injection by setting CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION=1.
   - Networking is enabled (no egress restrictions).
   - Web search tool is enabled (via `codex --search`).
-  - Ensures `{workspace}/tmp/fetched/{web,pdf,images,other}` exists and is ignored via `.git/info/exclude` when possible.
+  - Ensures `{workspace}/tmp/...` artifact folders exist (including `tmp/fetched/...`) and are ignored via `.git/info/exclude` when possible.
   - If the workspace is a git repo and has no `.beads/`, initializes Beads via `bd init --skip-hooks --skip-merge-driver` and migrates to a dedicated sync branch.
 EOF
 }
@@ -272,10 +272,16 @@ WORKSPACE_ROOT_CONT="$CONTAINER_HOME/$WORKSPACE_BASE"
 # so these artifacts don't show up in `git status`.
 # ----------------------------
 mkdir -p \
-  "$WORKSPACE_ROOT_HOST/tmp/fetched/web" \
-  "$WORKSPACE_ROOT_HOST/tmp/fetched/pdf" \
-  "$WORKSPACE_ROOT_HOST/tmp/fetched/images" \
-  "$WORKSPACE_ROOT_HOST/tmp/fetched/other"
+  "$WORKSPACE_ROOT_HOST/tmp/codex-container-sandbox" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/web/raw" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/web/markdown" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/pdf/raw" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/pdf/pages" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/pdf/text" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/images/raw" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/images/derived" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/other/raw" \
+  "$WORKSPACE_ROOT_HOST/tmp/fetched/other/derived"
 
 # Ensure the preflight script exists under workspace tmp (best-effort).
 PREFLIGHT_SCRIPT_HOST="$WORKSPACE_ROOT_HOST/${CODEX_CONTAINER_SANDBOX_PREFLIGHT_SCRIPT_REL:-tmp/codex-container-sandbox/preflight.sh}"
@@ -393,24 +399,30 @@ if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:-0}" -ne 1 ]]; then
         )
 
         # Configure dedicated sync branch/worktree (keeps normal branches clean).
-        # If this fails (no upstream remote, permissions, etc.), warn and continue.
+        #
+        # Important behavior note:
+        # - `bd migrate sync` currently attempts a `git push` as part of setup, which
+        #   is too surprising for an auto-init path.
+        # - Instead, we set `sync.branch` in `.beads/config.yaml` and rely on
+        #   `bd sync --no-pull --no-push` to create the local worktree/branch.
         if [[ -n "${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH:-}" ]]; then
-          if git -C "$WORKSPACE_ROOT_HOST" remote get-url origin >/dev/null 2>&1; then
-            echo "[codex-container-sandbox] Beads: migrating to sync branch: $CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH" >&2
-            (
-              cd "$WORKSPACE_ROOT_HOST"
-              BEADS_DIR="$BEADS_DIR_HOST" bd migrate sync "$CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH" || {
-                echo "[codex-container-sandbox] WARN: Beads migrate sync failed; continuing without sync-branch workflow." >&2
-                exit 0
-              }
-            )
+          echo "[codex-container-sandbox] Beads: configuring sync.branch=${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH} (local-only)" >&2
+          (
+            cd "$WORKSPACE_ROOT_HOST"
+            BEADS_DIR="$BEADS_DIR_HOST" bd config set sync.branch "$CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH" || {
+              echo "[codex-container-sandbox] WARN: Beads: failed to set sync.branch; leaving default behavior." >&2
+              exit 0
+            }
+          )
 
-            # Ensure there is an initial sync commit (and JSONL export) immediately
-            # after initialization. This keeps the "beads state" visible in git
-            # right away, without needing a follow-up manual sync.
-            #
-            # This is intentionally local-only: no pull/push here, to avoid
-            # unexpected network activity beyond the migrate step.
+          # Ensure there is an initial sync commit (and JSONL export) immediately
+          # after initialization so the JSONL exists right away on the sync branch.
+          #
+          # Intentionally local-only: no pull/push here.
+          #
+          # If the repo has no commits yet, bd currently falls back to committing
+          # on the current branch; skip to avoid surprising a brand new repo.
+          if git -C "$WORKSPACE_ROOT_HOST" rev-parse --verify HEAD >/dev/null 2>&1; then
             echo "[codex-container-sandbox] Beads: initial sync (local-only) to populate JSONL on sync branch" >&2
             (
               cd "$WORKSPACE_ROOT_HOST"
@@ -420,7 +432,7 @@ if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:-0}" -ne 1 ]]; then
               }
             )
           else
-            echo "[codex-container-sandbox] WARN: Beads: no git remote 'origin'; skipping sync-branch migration." >&2
+            echo "[codex-container-sandbox] WARN: Beads: repo has no commits yet; skipping initial sync (run later after first commit)." >&2
           fi
         fi
       else
@@ -667,6 +679,13 @@ PODMAN_ARGS+=( --user "$(id -u):$(id -g)" )
 # Keep it predictable
 PODMAN_ARGS+=( --env "HOME=$CONTAINER_HOME" --env "USER=${USER:-codex}" )
 PODMAN_ARGS+=( --env "CODEX_HOME=$STATE_CONT" )
+
+# Ensure bd can locate the workspace Beads directory even when the agent runs
+# in a nested subdirectory (bd does not automatically walk up to repo root).
+if [[ -d "$WORKSPACE_ROOT_HOST/.beads" ]]; then
+  PODMAN_ARGS+=( --env "BEADS_DIR=$WORKSPACE_ROOT_CONT/.beads" )
+fi
+
 PODMAN_ARGS+=( --workdir "$WORKSPACE_CONT" )
 
 # Use a persistent git global config under CODEX_HOME.
