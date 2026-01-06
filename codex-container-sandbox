@@ -675,6 +675,16 @@ PODMAN_ARGS+=( --env "XDG_CACHE_HOME=$STATE_CONT/cache" )
 # Workspace RW (root or current dir)
 PODMAN_ARGS+=( -v "$WORKSPACE_ROOT_HOST:$WORKSPACE_ROOT_CONT:rw" )
 
+# Make the repo-root AGENTS.md read-only inside the container (overlay mount).
+# This prevents in-container agents from modifying durable repo heuristics/memory
+# while keeping the rest of the workspace writable.
+#
+# Note: Some repos may not have AGENTS.md; only apply when present.
+AGENTS_HOST="$WORKSPACE_ROOT_HOST/AGENTS.md"
+if [[ -f "$AGENTS_HOST" ]]; then
+  PODMAN_ARGS+=( -v "$(readlink -f "$AGENTS_HOST"):$WORKSPACE_ROOT_CONT/AGENTS.md:ro" )
+fi
+
 # Codex state dir RW
 PODMAN_ARGS+=( -v "$CODEX_CONTAINER_SANDBOX_STATE_DIR:$STATE_CONT:rw" )
 
