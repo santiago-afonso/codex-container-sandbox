@@ -196,6 +196,13 @@ Then summarize (very briefly):
 - Whether \`\$CODEX_HOME/skills\` and \`\$CODEX_HOME/prompts\` are mounted
 - Confirm web search is enabled for this session (wrapper starts codex with \`--search\`)
 
+Then validate web search end-to-end:
+- Use the **built-in** \`web_search\` tool (not curl/python scraping) to search: "OpenAI Codex CLI documentation URL"
+- If it returns results, pick the official documentation URL and continue.
+- If it does not, report that web search appears unavailable/broken.
+
+When using Python in this environment, always run via \`uv run\` (do not call \`python\` directly).
+
 After that, proceed with the user request.
 EOF
         )
