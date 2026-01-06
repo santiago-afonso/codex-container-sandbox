@@ -30,6 +30,7 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_BD_AUTO_INIT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_BD_SYNC_BRANCH:=beads-sync}"
 : "${CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT:=}"
+: "${CODEX_CONTAINER_SANDBOX_PREFLIGHT_SCRIPT_REL:=tmp/codex-container-sandbox/preflight.sh}"
 
 # If set to 1, prints the computed podman command.
 : "${CODEX_CONTAINER_SANDBOX_DEBUG:=0}"
@@ -142,6 +143,9 @@ done
 # `codex resume [SESSION_ID] [PROMPT]` supports a positional PROMPT that is
 # applied immediately when resuming a session. We keep a hook to inject a default
 # prompt for resume workflows; by default it is empty (no injection).
+# Special value:
+# - CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT='@preflight' injects instructions
+#   to run the wrapper-created preflight script at `{workspace}/tmp/...`.
 # ----------------------------
 if [[ -n "${CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT:-}" ]]; then
   if [[ "${#CODEX_ARGS[@]}" -ge 1 ]] && [[ "${CODEX_ARGS[0]}" == "resume" || "${CODEX_ARGS[0]}" == "r" ]]; then
@@ -178,7 +182,25 @@ if [[ -n "${CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT:-}" ]]; then
     done
 
     if [[ "${#resume_positionals[@]}" -lt 2 ]]; then
-      CODEX_ARGS+=( "$CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT" )
+      prompt_to_inject="$CODEX_CONTAINER_SANDBOX_RESUME_FIRST_PROMPT"
+      if [[ "$prompt_to_inject" == "@preflight" ]]; then
+        preflight_rel="${CODEX_CONTAINER_SANDBOX_PREFLIGHT_SCRIPT_REL:-tmp/codex-container-sandbox/preflight.sh}"
+        prompt_to_inject=$(
+          cat <<EOF
+Before doing anything else, run the container environment preflight and paste the output:
+
+- Run: \`bash ./$preflight_rel | tee ./tmp/codex-container-sandbox/preflight.latest.txt\`
+
+Then summarize (very briefly):
+- Which tools are missing (if any)
+- Whether \`\$CODEX_HOME/skills\` and \`\$CODEX_HOME/prompts\` are mounted
+- Confirm web search is enabled for this session (wrapper starts codex with \`--search\`)
+
+After that, proceed with the user request.
+EOF
+        )
+      fi
+      CODEX_ARGS+=( "$prompt_to_inject" )
     fi
   fi
 fi
@@ -211,6 +233,78 @@ mkdir -p \
   "$WORKSPACE_ROOT_HOST/tmp/fetched/pdf" \
   "$WORKSPACE_ROOT_HOST/tmp/fetched/images" \
   "$WORKSPACE_ROOT_HOST/tmp/fetched/other"
+
+# Ensure the preflight script exists under workspace tmp (best-effort).
+PREFLIGHT_SCRIPT_HOST="$WORKSPACE_ROOT_HOST/${CODEX_CONTAINER_SANDBOX_PREFLIGHT_SCRIPT_REL:-tmp/codex-container-sandbox/preflight.sh}"
+PREFLIGHT_DIR_HOST="$(dirname "$PREFLIGHT_SCRIPT_HOST")"
+mkdir -p "$PREFLIGHT_DIR_HOST" >/dev/null 2>&1 || true
+if [[ ! -f "$PREFLIGHT_SCRIPT_HOST" ]]; then
+  if [[ -d "$PREFLIGHT_DIR_HOST" ]] && [[ -w "$PREFLIGHT_DIR_HOST" ]]; then
+    tmp_script="$(mktemp /tmp/codex-container-sandbox-preflight.XXXXXX 2>/dev/null || true)"
+    if [[ -n "${tmp_script:-}" ]]; then
+      cat >"$tmp_script" <<'EOF'
+#!/usr/bin/env bash
+# codex-container-sandbox preflight (runs inside container)
+set -u
+
+echo "[preflight] whoami=$(whoami 2>/dev/null || true)"
+echo "[preflight] id=$(id 2>/dev/null || true)"
+echo "[preflight] HOME=${HOME:-}"
+echo "[preflight] CODEX_HOME=${CODEX_HOME:-}"
+echo "[preflight] PWD=$(pwd -P 2>/dev/null || pwd)"
+echo "[preflight] PATH=${PATH:-}"
+
+echo "[preflight] --- mounts ---"
+if [[ -n "${CODEX_HOME:-}" ]]; then
+  if [[ -d "$CODEX_HOME/skills" ]]; then
+    echo "[preflight] skills mount: present ($CODEX_HOME/skills)"
+  else
+    echo "[preflight] skills mount: MISSING ($CODEX_HOME/skills)"
+  fi
+  if [[ -d "$CODEX_HOME/prompts" ]]; then
+    echo "[preflight] prompts mount: present ($CODEX_HOME/prompts)"
+  else
+    echo "[preflight] prompts mount: MISSING ($CODEX_HOME/prompts)"
+  fi
+else
+  echo "[preflight] CODEX_HOME is unset"
+fi
+
+check_tools() {
+  local missing=0
+  for tool in "$@"; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      echo "[preflight] OK   $tool -> $(command -v "$tool")"
+    else
+      echo "[preflight] MISS $tool"
+      missing=1
+    fi
+  done
+  return "$missing"
+}
+
+echo "[preflight] --- tool resolution (current shell) ---"
+check_tools codex bd python3 uv rg curl pandoc mq typst playwright chromium read-pdf markitdown ttok jq yq || true
+
+echo "[preflight] --- tool resolution (login shell: bash -lc) ---"
+if command -v bash >/dev/null 2>&1; then
+  bash -lc 'for tool in ttok jq yq markitdown; do if command -v "$tool" >/dev/null 2>&1; then echo "[preflight] OK   $tool -> $(command -v "$tool")"; else echo "[preflight] MISS $tool"; fi; done' || true
+else
+  echo "[preflight] bash missing; cannot test bash -lc PATH behavior"
+fi
+
+echo "[preflight] --- codex web search flag ---"
+if command -v codex >/dev/null 2>&1; then
+  codex --help 2>/dev/null | sed -n '85,110p' | sed 's/^/[preflight] /' || true
+fi
+EOF
+      chmod +x "$tmp_script" >/dev/null 2>&1 || true
+      if ! mv -f "$tmp_script" "$PREFLIGHT_SCRIPT_HOST" >/dev/null 2>&1; then
+        rm -f "$tmp_script" >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+fi
 
 if git -C "$WORKSPACE_ROOT_HOST" rev-parse --git-dir >/dev/null 2>&1; then
   git_dir="$(git -C "$WORKSPACE_ROOT_HOST" rev-parse --git-dir)"
