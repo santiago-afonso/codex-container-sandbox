@@ -22,6 +22,7 @@ set -euo pipefail
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_LOCAL_BIN_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_TOOLS_MOUNT:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_UV_PYTHON_MOUNT:=0}"
+: "${CODEX_CONTAINER_SANDBOX_DISABLE_DNS_OVERRIDE:=0}"
 : "${CODEX_CONTAINER_SANDBOX_DISABLE_GIT_IDENTITY_SYNC:=0}"
 : "${CODEX_CONTAINER_SANDBOX_GIT_NAME:=}"
 : "${CODEX_CONTAINER_SANDBOX_GIT_EMAIL:=}"
@@ -100,6 +101,37 @@ if declare -p CODEX_CONTAINER_SANDBOX_ENV_PASSTHROUGH >/dev/null 2>&1; then
 elif [[ -n "${CODEX_CONTAINER_SANDBOX_ENV_PASSTHROUGH-}" ]]; then
   # shellcheck disable=SC2206
   SANDBOX_ENV_PASSTHROUGH+=(${CODEX_CONTAINER_SANDBOX_ENV_PASSTHROUGH})
+fi
+
+# ----------------------------
+# DNS defaults (WSL-friendly)
+#
+# We have observed intermittent DNS resolution failures inside short-lived,
+# non-interactive runs (e.g., `codex exec` tool invocations). These often stem
+# from inheriting unstable host/WSL DNS forwarders.
+#
+# By default, pin the container resolvers to:
+# - NextDNS (primary): 45.90.28.212, 45.90.30.212
+# - Cloudflare (secondary): 1.1.1.1
+# - Google (tertiary): 8.8.8.8
+#
+# Override in config with either:
+#   CODEX_CONTAINER_SANDBOX_DNS_SERVERS=(...)
+# or
+#   CODEX_CONTAINER_SANDBOX_DNS_SERVERS="ip1 ip2 ..."
+# Disable entirely with:
+#   CODEX_CONTAINER_SANDBOX_DISABLE_DNS_OVERRIDE=1
+# ----------------------------
+DNS_SERVERS_DEFAULT=(45.90.28.212 45.90.30.212 1.1.1.1 8.8.8.8)
+DNS_SERVERS=()
+if declare -p CODEX_CONTAINER_SANDBOX_DNS_SERVERS >/dev/null 2>&1; then
+  # shellcheck disable=SC2154
+  DNS_SERVERS+=("${CODEX_CONTAINER_SANDBOX_DNS_SERVERS[@]}")
+elif [[ -n "${CODEX_CONTAINER_SANDBOX_DNS_SERVERS-}" ]]; then
+  # shellcheck disable=SC2206
+  DNS_SERVERS+=(${CODEX_CONTAINER_SANDBOX_DNS_SERVERS})
+else
+  DNS_SERVERS+=("${DNS_SERVERS_DEFAULT[@]}")
 fi
 
 # ----------------------------
@@ -649,6 +681,13 @@ fi
 # Minimal PATH with typical user bins first
 container_path="$CONTAINER_HOME/.local/bin:$CONTAINER_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PODMAN_ARGS+=( --env "PATH=$container_path" )
+
+# DNS override (optional; default on).
+if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_DNS_OVERRIDE:-0}" -ne 1 ]]; then
+  for dns in "${DNS_SERVERS[@]}"; do
+    PODMAN_ARGS+=( --dns "$dns" )
+  done
+fi
 
 # Ensure `bash -c ...` and `bash -lc ...` subprocesses see the same PATH.
 # Many agent tool runners invoke commands via non-interactive shells and some use

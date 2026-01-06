@@ -95,6 +95,12 @@ The image also sets common environment variables so tools prefer the system CA b
 - `GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt`
 - `CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt`
 
+## DNS reliability (WSL / short-lived execs)
+
+On some setups (notably WSL2 + rootless Podman), short-lived non-interactive runs can see intermittent DNS failures (e.g. `curl: (6) Could not resolve host`) even when interactive shells appear fine.
+
+The `codex-container-sandbox` wrapper pins DNS servers by default to improve reliability. If you need to inherit host DNS behavior (or use different resolvers), configure it via `~/.config/codex-container-sandbox/config.sh` (see `README.md`).
+
 ## Safety / scope reminders
 
 - Treat the workspace as sensitive (it may include credentials and private content).

@@ -82,6 +82,12 @@ CODEX_CONTAINER_SANDBOX_IMAGE="localhost/codex-container-sandbox:latest"
 # Optional: force an OCI runtime (useful on some WSL/work setups).
 # CODEX_CONTAINER_SANDBOX_PODMAN_RUNTIME="runc"
 
+# Optional: override DNS servers used inside the container (default is pinned).
+# Disable the override to inherit host/Podman DNS behavior:
+# CODEX_CONTAINER_SANDBOX_DISABLE_DNS_OVERRIDE=1
+# Or override the server list (in order):
+# CODEX_CONTAINER_SANDBOX_DNS_SERVERS=(45.90.28.212 45.90.30.212 1.1.1.1 8.8.8.8)
+
 # Mount helper tools read-only (mapped under /home/codex/...)
 CODEX_CONTAINER_SANDBOX_RO_MOUNTS=(
   "$HOME/.local/bin"
