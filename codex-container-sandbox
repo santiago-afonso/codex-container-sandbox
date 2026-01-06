@@ -755,24 +755,33 @@ else
     before_exec=( "${CODEX_ARGS[@]:0:$((exec_idx+1))}" )
     after_exec=( "${CODEX_ARGS[@]:$((exec_idx+1))}" )
 
-    # Remove any global-yolo flags from before_exec, since `codex exec` has its
-    # own copies of these options and the top-level ones don't affect exec.
-    before_exec_clean=()
-    i=0
-    while [[ "$i" -lt "${#before_exec[@]}" ]]; do
-      case "${before_exec[$i]}" in
-        --sandbox|-s|--ask-for-approval|-a)
-          i=$((i+2))
-          ;;
-        --yolo|--dangerously-bypass-approvals-and-sandbox|--full-auto)
-          i=$((i+1))
-          ;;
-        *)
-          before_exec_clean+=( "${before_exec[$i]}" )
-          i=$((i+1))
-          ;;
-      esac
-    done
+    # By default, we strip global sandbox/approval flags from before_exec and
+    # re-inject them after `exec` (where `codex exec` actually reads them).
+    #
+    # However, for debugging scenarios where the user explicitly disables our
+    # yolo injection (CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION=1), we
+    # should preserve global flags (notably `-a/--ask-for-approval`) since they
+    # may only be accepted as top-level flags.
+    if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION:-0}" -eq 1 ]]; then
+      before_exec_clean=( "${before_exec[@]}" )
+    else
+      before_exec_clean=()
+      i=0
+      while [[ "$i" -lt "${#before_exec[@]}" ]]; do
+        case "${before_exec[$i]}" in
+          --sandbox|-s|--ask-for-approval|-a)
+            i=$((i+2))
+            ;;
+          --yolo|--dangerously-bypass-approvals-and-sandbox|--full-auto)
+            i=$((i+1))
+            ;;
+          *)
+            before_exec_clean+=( "${before_exec[$i]}" )
+            i=$((i+1))
+            ;;
+        esac
+      done
+    fi
 
     injected=()
     if [[ "${CODEX_CONTAINER_SANDBOX_DISABLE_YOLO_INJECTION:-0}" -ne 1 ]]; then
