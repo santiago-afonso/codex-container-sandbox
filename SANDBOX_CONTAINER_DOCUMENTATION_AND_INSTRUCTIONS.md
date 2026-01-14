@@ -26,7 +26,7 @@ Recommended Windows-side command (PowerShell, from the `os_scripts` repo):
 
 Then rebuild the image if needed:
 
-- `cd ~/dotfiles/codex-container-sandbox && make install`
+- `cd ~/machine-setup/tools/codex-container-sandbox && make install`
 
 ## Where should I write artifacts?
 
